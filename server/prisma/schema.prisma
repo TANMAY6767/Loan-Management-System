@@ -7,10 +7,133 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  head
+  coo
+  manager
+  caller
+  customer_service
+}
+
+enum AccountStatus {
+  New
+  Working
+  PTP
+  Part_paid
+  Closed
+  Settled
+}
+
+model Office {
+  id        String @id @default(cuid())
+  name      String @unique
+  users     User[]
+  acccounts Account[]
+}
+
 model User {
+  id        String @id
+  name      String
+  username  String @unique
+  password  String
+  role      Role
+  officeId  String
+  office    Office @relation(fields: [officeId],references: [id])
+  managerId String?
+  manager   User? @relation("Team",fields: [managerId], references: [id])
+  callers     User[]   @relation("Team")
+  accounts    Account[] @relation("CurrentOwner")
+  allocations Allocation[]
+  calls       CallLog[]
+  promises    PTP[]
+  payments    Payment[]
+  createdAt   DateTime @default(now())
+}
+
+model Account {
+  loanNo           String        @id
+  portfolio        String
+  sellerBank       String
+  customerName     String
+  mobile           String
+  email            String?
+  city             String
+  state            String
+  officeId         String
+  office           Office        @relation(fields: [officeId], references: [id])
+  language         String
+  product          String
+  originalAmount   Decimal       @db.Decimal(14, 2)
+  outstanding      Decimal       @db.Decimal(14, 2)
+  npaDate          DateTime?
+  lastPaymentDate  DateTime?
+  status           AccountStatus @default(New)
+  assignedToId     String?
+  assignedTo       User?         @relation("CurrentOwner", fields: [assignedToId], references: [id])
+  allocations      Allocation[]
+  calls            CallLog[]
+  promises         PTP[]
+  payments         Payment[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@index([customerName])
+  @@index([mobile])
+  @@index([assignedToId, status])
+  @@index([officeId, status])
+}
+
+model Allocation {
+  id          String   @id @default(cuid())
+  accountId   String
+  account     Account  @relation(fields: [accountId], references: [loanNo], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  allocatedBy String
+  fromUserId  String?
+  allocatedAt DateTime @default(now())
+
+  @@index([accountId, allocatedAt])
+}
+
+model CallLog {
+  id           String   @id @default(cuid())
+  accountId    String
+  account      Account  @relation(fields: [accountId], references: [loanNo], onDelete: Cascade)
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  disposition  String
+  remarks      String?
+  followUpAt   DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([accountId, createdAt])
+}
+
+model PTP {
   id        String   @id @default(cuid())
-  name      String?
-  email     String   @unique
+  accountId String
+  account   Account  @relation(fields: [accountId], references: [loanNo], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  amount    Decimal  @db.Decimal(14, 2)
+  dueDate   DateTime
+  status    String   @default("Pending")
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  @@index([dueDate, status])
+}
+
+model Payment {
+  id          String   @id @default(cuid())
+  accountId   String
+  account     Account  @relation(fields: [accountId], references: [loanNo], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  amount      Decimal  @db.Decimal(14, 2)
+  paidAt      DateTime @default(now())
+  reference   String?
+  notes       String?
+
+  @@index([accountId, paidAt])
 }
