@@ -1,4 +1,3 @@
-
 import 'dotenv/config';
 
 import { readFile } from 'node:fs/promises';
@@ -41,20 +40,10 @@ function isResetMode() {
   return process.argv.includes('--reset');
 }
 
-function getBatches(items, batchSize = BATCH_SIZE) {
-  const batches = [];
-
-  for (let i = 0; i < items.length; i += batchSize) {
-    batches.push(items.slice(i, i + batchSize));
-  }
-
-  return batches;
-}
-
 async function resetLoanData() {
   console.log('Resetting existing loan data...');
 
-
+  // Delete dependent records before deleting their accounts.
   await prisma.payment.deleteMany();
   await prisma.pTP.deleteMany();
   await prisma.callLog.deleteMany();
@@ -114,7 +103,6 @@ async function seedUsers(users, officeMap) {
 
       create: {
         id: user.user_id,
-        name: user.name,
         username:
           user.username || user.user_id.toLowerCase(),
         password: hashedPassword,
@@ -126,22 +114,7 @@ async function seedUsers(users, officeMap) {
   console.log(`${users.length} users processed.`);
 }
 
-function groupCallersByOffice(users) {
-  const callersByOffice = new Map();
-
-  for (const user of users) {
-    if (user.role !== 'caller') continue;
-
-    const callers = callersByOffice.get(user.office) || [];
-    callers.push(user);
-
-    callersByOffice.set(user.office, callers);
-  }
-
-  return callersByOffice;
-}
-
-function mapAccountRow(row, officeMap, assignedToId) {
+function mapAccountRow(row, officeMap) {
   const officeId = officeMap.get(row.office);
 
   if (!officeId) {
@@ -166,15 +139,18 @@ function mapAccountRow(row, officeMap, assignedToId) {
     outstanding: Number(row.outstanding),
     npaDate: parseDate(row.npa_date),
     lastPaymentDate: parseDate(row.last_payment_date),
+
+    // Every newly seeded account starts unassigned.
+    assignedToId: null,
+
+    // The manager will assign accounts later.
     status: 'New',
-    assignedToId,
   };
 }
 
-async function seedAccounts(accounts, users, officeMap) {
-  const callersByOffice = groupCallersByOffice(users);
-
-
+async function seedAccounts(accounts, officeMap) {
+  // When resetting, the previous accounts have already been deleted.
+  // Otherwise, skip loan numbers that already exist.
   const existingLoans = isResetMode()
     ? new Set()
     : new Set(
@@ -187,39 +163,30 @@ async function seedAccounts(accounts, users, officeMap) {
 
   const seenLoans = new Set(existingLoans);
   let imported = 0;
-  const initialAllocations = [];
 
-  for (let index = 0; index < accounts.length; index += BATCH_SIZE) {
-    const rows = accounts.slice(index, index + BATCH_SIZE);
+  for (
+    let index = 0;
+    index < accounts.length;
+    index += BATCH_SIZE
+  ) {
+    const rows = accounts.slice(
+      index,
+      index + BATCH_SIZE
+    );
+
     const accountRecords = [];
 
-    for (let offset = 0; offset < rows.length; offset++) {
-      const row = rows[offset];
-      const rowNumber = index + offset;
-
-
+    for (const row of rows) {
+      // Prevent duplicate loan numbers within the CSV or database.
       if (seenLoans.has(row.loan_no)) continue;
+
       seenLoans.add(row.loan_no);
 
-      const callers = callersByOffice.get(row.office) || [];
-
-
-      const assigned =
-        rowNumber % 10 === 0 || callers.length === 0
-          ? null
-          : callers[rowNumber % callers.length];
-
+      // No caller is selected here.
+      // No allocation history is created during seeding.
       accountRecords.push(
-        mapAccountRow(row, officeMap, assigned?.user_id || null)
+        mapAccountRow(row, officeMap)
       );
-
-      if (assigned) {
-        initialAllocations.push({
-          accountId: row.loan_no,
-          userId: assigned.user_id,
-          allocatedBy: assigned.manager_id || 'U001',
-        });
-      }
     }
 
     if (accountRecords.length === 0) continue;
@@ -237,18 +204,8 @@ async function seedAccounts(accounts, users, officeMap) {
     );
   }
 
-
-  for (const batch of getBatches(initialAllocations)) {
-    await prisma.allocation.createMany({
-      data: batch,
-      skipDuplicates: true,
-    });
-  }
-
   console.log(`Accounts inserted: ${imported}`);
-  console.log(
-    `Initial allocations prepared: ${initialAllocations.length}`
-  );
+  console.log('New accounts have not been assigned to callers.');
 }
 
 async function main() {
@@ -271,10 +228,12 @@ async function main() {
 
   await seedUsers(users, officeMap);
 
-  await seedAccounts(accounts, users, officeMap);
+  await seedAccounts(accounts, officeMap);
 
   console.log('Seed completed successfully.');
-  console.log(`Demo password for newly created users: ${DEFAULT_PASSWORD}`);
+  console.log(
+    `Demo password for newly created users: ${DEFAULT_PASSWORD}`
+  );
 }
 
 try {
