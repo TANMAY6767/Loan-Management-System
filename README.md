@@ -32,7 +32,7 @@ A demo recovery workspace for accounts that have already been purchased. It supp
    npm run dev
    ```
 
-   Open `http://localhost:5173`. Use `npm run db:reset-demo` to clear accounts and activity, then reload the demo users. This leaves the account list empty so you can demonstrate CSV upload. `npm run db:seed` by itself only creates or updates users and offices; it does not clear existing accounts.
+   Open `http://localhost:5173`.
 
 ## Demo logins
 

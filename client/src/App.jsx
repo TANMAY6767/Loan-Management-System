@@ -68,6 +68,11 @@ function App() {
   });
 
   const canManage = ['head', 'coo', 'manager'].includes(user?.role);
+  const roleTheme = ['head', 'coo'].includes(user?.role)
+    ? 'head'
+    : user?.role === 'manager'
+      ? 'manager'
+      : 'caller';
 
   const notify = useCallback((message, type = 'success') => {
     window.clearTimeout(toastTimer.current);
@@ -272,7 +277,9 @@ function App() {
   }
 
   return (
-    <div className="app-shell min-h-screen bg-shaha-canvas text-shaha-ink">
+    <div
+      className={`app-shell theme-${roleTheme} min-h-screen bg-shaha-canvas text-shaha-ink`}
+    >
       <aside
         className={`sidebar fixed inset-y-0 left-0 z-20 flex w-[244px] flex-col border-r border-[#e8ebe7] bg-white px-[17px] pb-4 pt-[25px] ${
           mobileNav ? 'sidebar-open' : ''

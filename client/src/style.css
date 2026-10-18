@@ -18,6 +18,12 @@
   --green: #205b48;
   --green-dark: #174938;
   --mint: #edf5f0;
+  --accent: #205b48;
+  --accent-hover: #174938;
+  --accent-soft: #edf4ef;
+  --accent-border: #d8e8dc;
+  --accent-text: #205b48;
+  --workspace-bg: #f5f6f4;
   --white: #fff;
   --shadow: 0 10px 35px rgba(27,44,35,.07);
 }
@@ -49,6 +55,37 @@ button:disabled {
   min-height: 100vh;
 }
 
+.app-shell.theme-head {
+  --accent: #4255a4;
+  --accent-hover: #344487;
+  --accent-soft: #eef0fb;
+  --accent-border: #d9def5;
+  --accent-text: #3d4f99;
+  --workspace-bg: #f0f2fb;
+}
+
+.app-shell.theme-manager {
+  --accent: #147d78;
+  --accent-hover: #0e6864;
+  --accent-soft: #e9f6f4;
+  --accent-border: #cfe9e6;
+  --accent-text: #126e69;
+  --workspace-bg: #f7f1e8;
+}
+
+.app-shell.theme-caller {
+  --accent: #3f7954;
+  --accent-hover: #326443;
+  --accent-soft: #edf5ef;
+  --accent-border: #d6e8da;
+  --accent-text: #356b49;
+  --workspace-bg: #edf5ef;
+}
+
+.main-area {
+  background-color: var(--workspace-bg, #f5f6f4);
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -60,7 +97,7 @@ button:disabled {
   width: 36px;
   height: 36px;
   border-radius: 11px;
-  background: #205b48;
+  background: var(--accent);
   color: #fff;
   font: 800 23px Manrope,sans-serif;
   display: grid;
@@ -119,13 +156,13 @@ button:disabled {
 }
 
 .nav-item:hover {
-  background: #f7f8f6;
-  color: #355c4b;
+  background: var(--accent-soft);
+  color: var(--accent-text);
 }
 
 .nav-item.active {
-  background: #edf4ef;
-  color: #205b48;
+  background: var(--accent-soft);
+  color: var(--accent-text);
   font-weight: 700;
 }
 
@@ -135,7 +172,7 @@ button:disabled {
   left: -17px;
   width: 3px;
   height: 23px;
-  background: #38765b;
+  background: var(--accent);
   border-radius: 0 3px 3px 0;
 }
 
@@ -143,8 +180,8 @@ button:disabled {
   margin-left: auto;
   font-size: 10px;
   font-weight: 700;
-  background: #e0ebe2;
-  color: #35654f;
+  background: var(--accent-border);
+  color: var(--accent-text);
   border-radius: 10px;
   padding: 2px 7px;
 }
@@ -196,6 +233,11 @@ button:disabled {
   background: #e9f0e9;
   color: #38644e;
   font-weight: 700;
+}
+
+.profile-row .avatar {
+  background: var(--accent-soft);
+  color: var(--accent-text);
 }
 
 .avatar {
@@ -344,25 +386,25 @@ button:disabled {
 }
 
 .secondary-button {
-  border: 1px solid #dfe6e0;
+  border: 1px solid var(--accent-border);
   background: #fff;
-  color: #42634f;
+  color: var(--accent-text);
 }
 
 .secondary-button:hover {
-  border-color: #aac2b1;
-  background: #f8fbf8;
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .primary-button {
-  background: #205b48;
-  border: 1px solid #205b48;
+  background: var(--accent);
+  border: 1px solid var(--accent);
   color: white;
   box-shadow: 0 2px 3px #143e3024;
 }
 
 .primary-button:hover {
-  background: #174938;
+  background: var(--accent-hover);
 }
 
 .metric-grid {

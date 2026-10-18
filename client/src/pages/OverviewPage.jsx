@@ -35,10 +35,10 @@ const METRIC_CONFIG = [
   {
     key: 'outstanding',
     icon: Wallet,
-    title: 'Outstanding balance',
+    title: 'Remaining balance',
     value: (dashboard) =>
-      dashboard ? cash(dashboard.totalOutstanding) : '—',
-    foot: 'Loaded portfolio balance',
+      dashboard ? cash(dashboard.remainingBalance) : '—',
+    foot: (dashboard) => `${cash(dashboard?.totalPaid)} received so far`,
     color: 'blue',
   },
   {

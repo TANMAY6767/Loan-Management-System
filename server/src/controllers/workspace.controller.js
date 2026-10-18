@@ -62,6 +62,15 @@ export const getDashboard = asyncHandler(async (req, res) => {
     if (account.assignedToId) assigned += 1;
   });
 
+  const paymentTotals = accounts.length
+    ? await prisma.payment.aggregate({
+        where: { accountId: { in: accounts.map((account) => account.loanNo) } },
+        _sum: { amount: true },
+      })
+    : null;
+  const totalPaid = money(paymentTotals?._sum.amount);
+  const remainingBalance = Math.max(0, totalOutstanding - totalPaid);
+
   const recent = await prisma.callLog.findMany({
     where: { account: { is: scope } },
     include: {
@@ -75,6 +84,8 @@ export const getDashboard = asyncHandler(async (req, res) => {
   return sendResponse(res, true, {
     totalAccounts: accounts.length,
     totalOutstanding,
+    totalPaid,
+    remainingBalance,
     assigned,
     unassigned: accounts.length - assigned,
     callers: people,
