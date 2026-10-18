@@ -7,6 +7,10 @@ import { ApiError } from '../utils/ApiError.js';
 import { accountScope, dayEnd } from '../utils/accountScope.js';
 import { sendResponse } from '../utils/sendResponse.js';
 import { statusType } from '../utils/statusType.js';
+import {
+  isPastCalendarDateInIndia,
+  markOverduePromises,
+} from '../utils/promiseStatus.js';
 
 
 const ACCOUNT_STATUSES = [
@@ -32,6 +36,17 @@ const ACCOUNT_INCLUDE = {
 const BATCH_SIZE = 1000;
 
 const money = (value) => Number(value || 0);
+
+function getUtcDateBounds(date) {
+  const start = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+  );
+
+  return {
+    start,
+    end: new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1),
+  };
+}
 
 function getPagination(query) {
   const page = Math.max(1, Number(query.page) || 1);
@@ -250,6 +265,8 @@ async function getQueueAccounts(where, skip, pageSize) {
 }
 
 export const listAccounts = asyncHandler(async (req, res) => {
+  await markOverduePromises(accountScope(req.user));
+
   const { page, pageSize, skip } = getPagination(req.query);
   const where = buildAccountFilters(req);
 
@@ -339,10 +356,14 @@ export const createPromise = asyncHandler(async (req, res) => {
   const amount = Number(req.body?.amount);
   const dueDate = new Date(req.body?.dueDate);
 
-  if (!(amount > 0) || Number.isNaN(dueDate.getTime())) {
+  if (
+    !(amount > 0) ||
+    Number.isNaN(dueDate.getTime()) ||
+    isPastCalendarDateInIndia(dueDate)
+  ) {
     throw new ApiError(
       statusType.BAD_REQUEST,
-      'Enter a valid promise amount and due date.'
+      'Enter a valid promise amount and a due date that is today or later.'
     );
   }
 
@@ -373,64 +394,97 @@ export const createPromise = asyncHandler(async (req, res) => {
 
 export const recordPayment = asyncHandler(async (req, res) => {
   const amount = Number(req.body?.amount);
+  const paidAt = req.body?.paidAt
+    ? new Date(req.body.paidAt)
+    : new Date();
 
-  if (!(amount > 0)) {
+  if (
+    !(amount > 0) ||
+    Number.isNaN(paidAt.getTime()) ||
+    paidAt > new Date()
+  ) {
     throw new ApiError(
       statusType.BAD_REQUEST,
-      'Enter a payment amount greater than zero.'
+      'Enter a valid payment amount and date.'
     );
   }
 
   const account = req.account;
+  const paidDateBounds = getUtcDateBounds(paidAt);
+  const result = await prisma.$transaction(async (tx) => {
+    const payment = await tx.payment.create({
+      data: {
+        accountId: account.loanNo,
+        userId: req.user.id,
+        amount,
+        reference: req.body.reference || null,
+        notes: req.body.notes || null,
+        paidAt,
+      },
+    });
 
-  const payment = await prisma.payment.create({
-    data: {
-      accountId: account.loanNo,
-      userId: req.user.id,
-      amount,
-      reference: req.body.reference || null,
-      notes: req.body.notes || null,
-      paidAt: req.body.paidAt
-        ? new Date(req.body.paidAt)
-        : new Date(),
-    },
-  });
+    const paymentTotal = await tx.payment.aggregate({
+      where: { accountId: account.loanNo },
+      _sum: { amount: true },
+    });
+    const totalPaid = money(paymentTotal._sum.amount);
 
+    const status =
+      totalPaid >= money(account.outstanding)
+        ? req.body.settled
+          ? 'Settled'
+          : 'Closed'
+        : 'Part_paid';
 
-  const paymentTotal = await prisma.payment.aggregate({
-    where: { accountId: account.loanNo },
-    _sum: { amount: true },
-  });
+    await tx.account.update({
+      where: { loanNo: account.loanNo },
+      data: { status },
+    });
 
-  const totalPaid = money(paymentTotal._sum.amount);
+    const promises = await tx.pTP.findMany({
+      where: {
+        accountId: account.loanNo,
+        status: 'Pending',
+        createdAt: { lte: paidDateBounds.end },
+        dueDate: { gte: paidDateBounds.start },
+      },
+      select: {
+        id: true,
+        amount: true,
+        createdAt: true,
+        dueDate: true,
+      },
+    });
 
+    for (const promise of promises) {
+      const promiseStart = getUtcDateBounds(promise.createdAt).start;
+      const promiseEnd = getUtcDateBounds(promise.dueDate).end;
+      const paymentsAfterPromise = await tx.payment.aggregate({
+        where: {
+          accountId: account.loanNo,
+          paidAt: {
+            gte: promiseStart,
+            lte: promiseEnd,
+          },
+        },
+        _sum: { amount: true },
+      });
 
-  const status =
-    totalPaid >= money(account.outstanding)
-      ? req.body.settled
-        ? 'Settled'
-        : 'Closed'
-      : 'Part_paid';
+      if (money(paymentsAfterPromise._sum.amount) >= money(promise.amount)) {
+        await tx.pTP.update({
+          where: { id: promise.id },
+          data: { status: 'Kept' },
+        });
+      }
+    }
 
-  await prisma.account.update({
-    where: { loanNo: account.loanNo },
-    data: { status },
-  });
-
-
-  await prisma.pTP.updateMany({
-    where: {
-      accountId: account.loanNo,
-      status: 'Pending',
-      dueDate: { gte: new Date() },
-    },
-    data: { status: 'Kept' },
+    return { payment, totalPaid, status };
   });
 
   return sendResponse(
     res,
     true,
-    { payment, paid: totalPaid, status },
+    { payment: result.payment, paid: result.totalPaid, status: result.status },
     'Payment recorded.',
     statusType.CREATED
   );
@@ -497,29 +551,30 @@ export const allocateAccounts = asyncHandler(async (req, res) => {
   }
 
 
-  await prisma.$transaction(
-    accounts.map((account) =>
-      prisma.account.update({
-        where: { loanNo: account.loanNo },
-        data: {
-          assignedToId: target.id,
-          status:
-            account.status === 'New'
-              ? 'Working'
-              : account.status,
-        },
-      })
-    )
-  );
+  await prisma.$transaction(async (tx) => {
+    await Promise.all(
+      accounts.map((account) =>
+        tx.account.update({
+          where: { loanNo: account.loanNo },
+          data: {
+            assignedToId: target.id,
+            status:
+              account.status === 'New'
+                ? 'Working'
+                : account.status,
+          },
+        })
+      )
+    );
 
-
-  await prisma.allocation.createMany({
-    data: accounts.map((account) => ({
-      accountId: account.loanNo,
-      userId: target.id,
-      allocatedBy: req.user.id,
-      fromUserId: account.assignedToId,
-    })),
+    await tx.allocation.createMany({
+      data: accounts.map((account) => ({
+        accountId: account.loanNo,
+        userId: target.id,
+        allocatedBy: req.user.id,
+        fromUserId: account.assignedToId,
+      })),
+    });
   });
 
   return sendResponse(

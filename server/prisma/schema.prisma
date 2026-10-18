@@ -28,7 +28,7 @@ model Office {
   id        String @id @default(cuid())
   name      String @unique
   users     User[]
-  acccounts Account[]
+  accounts  Account[]
 }
 
 model User {
@@ -43,7 +43,9 @@ model User {
   manager   User? @relation("Team",fields: [managerId], references: [id])
   callers     User[]   @relation("Team")
   accounts    Account[] @relation("CurrentOwner")
-  allocations Allocation[]
+  allocations         Allocation[] @relation("AllocationAssignee")
+  previousAllocations Allocation[] @relation("AllocationPreviousOwner")
+  createdAllocations  Allocation[] @relation("AllocationActor")
   calls       CallLog[]
   promises    PTP[]
   payments    Payment[]
@@ -88,9 +90,11 @@ model Allocation {
   accountId   String
   account     Account  @relation(fields: [accountId], references: [loanNo], onDelete: Cascade)
   userId      String
-  user        User     @relation(fields: [userId], references: [id])
+  user        User     @relation("AllocationAssignee", fields: [userId], references: [id])
   allocatedBy String
+  allocator   User     @relation("AllocationActor", fields: [allocatedBy], references: [id])
   fromUserId  String?
+  fromUser    User?    @relation("AllocationPreviousOwner", fields: [fromUserId], references: [id], onDelete: SetNull)
   allocatedAt DateTime @default(now())
 
   @@index([accountId, allocatedAt])

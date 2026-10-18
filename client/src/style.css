@@ -1773,6 +1773,15 @@ td {
   color: #bddbc1;
 }
 
+.toast-error {
+  background: #9f352f;
+  box-shadow: 0 7px 25px #6f211f40;
+}
+
+.toast-error svg {
+  color: #ffe0dc;
+}
+
 .nav-scrim {
   display: none;
 }

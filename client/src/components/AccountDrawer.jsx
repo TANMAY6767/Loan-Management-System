@@ -90,9 +90,9 @@ function getActivityItems(account) {
     at: item.allocatedAt,
     title: `Assigned to ${item.user.name}`,
     body: item.fromUserId
-      ? `Reassigned from ${item.fromUserId}`
+      ? `Reassigned from ${item.fromUser?.name || item.fromUserId}`
       : 'First assignment',
-    by: 'Allocation',
+    by: item.allocator?.name || 'Allocation',
   }));
 
   return [...callItems, ...promiseItems, ...allocationItems].sort(
@@ -625,7 +625,7 @@ export default function AccountDrawer({
       const data = await getAccount(loanNo);
       setAccount(data);
     } catch (error) {
-      notify(error.message);
+      notify(error.message, 'error');
     }
   }, [loanNo, notify]);
 
@@ -648,7 +648,7 @@ export default function AccountDrawer({
 
       await reload();
     } catch (error) {
-      notify(error.message);
+      notify(error.message, 'error');
     } finally {
       setBusy(false);
     }

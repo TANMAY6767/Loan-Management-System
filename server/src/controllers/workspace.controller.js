@@ -2,6 +2,7 @@ import { prisma } from '../config/prisma.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { sendResponse } from '../utils/sendResponse.js';
 import { accountScope } from '../utils/accountScope.js';
+import { markOverduePromises } from '../utils/promiseStatus.js';
 
 const money = (value) => Number(value || 0);
 
@@ -10,7 +11,9 @@ export const getTeam = asyncHandler(async (req, res) => {
     ? {}
     : req.user.role === 'manager'
       ? { managerId: req.user.id }
-      : { role: 'caller', officeId: req.user.officeId };
+      : req.user.role === 'caller'
+        ? { id: req.user.id }
+        : { role: 'caller', officeId: req.user.officeId };
 
   const users = await prisma.user.findMany({
     where,
@@ -30,10 +33,7 @@ export const getTeam = asyncHandler(async (req, res) => {
 });
 
 export const getDashboard = asyncHandler(async (req, res) => {
-  await prisma.pTP.updateMany({
-    where: { status: 'Pending', dueDate: { lt: new Date() } },
-    data: { status: 'Broken' },
-  });
+  await markOverduePromises(accountScope(req.user));
 
   const scope = accountScope(req.user);
   const [accounts, people, pendingPromises] = await Promise.all([

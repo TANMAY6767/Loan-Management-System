@@ -1,4 +1,5 @@
 node_modules/
+client/dist/
 web/dist/
 server/node_modules/
 server/.env

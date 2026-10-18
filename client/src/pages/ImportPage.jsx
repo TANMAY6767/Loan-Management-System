@@ -215,7 +215,7 @@ export default function ImportPage({ onDone }) {
         `${result.imported.toLocaleString('en-IN')} accounts imported · ${result.skipped} skipped.`
       );
     } catch (error) {
-      onDone(error.message);
+      onDone(error.message, 'error');
     } finally {
       setBusy(false);
     }

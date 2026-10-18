@@ -25,8 +25,8 @@ const ACCOUNT_TITLES = {
     description: 'Your assigned accounts, with follow-ups ready to work.',
   },
   Allocation: {
-    title: 'Unassigned accounts',
-    description: 'Select accounts to assign to a caller on your team.',
+    title: 'Allocate accounts',
+    description: 'Select accounts to assign or reassign to a caller on your team.',
   },
   Accounts: {
     title: 'Accounts',
@@ -166,7 +166,7 @@ function SelectionNotice({ selectedCount }) {
     <div className="selection-note">
       <Check size={15} />
       {selectedCount} account{selectedCount !== 1 ? 's' : ''} selected.
-      Choose a caller below to assign.
+      Selection is kept while you move between pages.
     </div>
   );
 }
@@ -177,11 +177,18 @@ function SelectAllCheckbox({ accounts, selected, setSelected }) {
     accounts.every((account) => selected.includes(account.loanNo));
 
   function handleChange(event) {
-    setSelected(
-      event.target.checked
-        ? accounts.map((account) => account.loanNo)
-        : []
+    const checked = event.target.checked;
+    const pageLoanNumbers = new Set(
+      accounts.map((account) => account.loanNo)
     );
+
+    setSelected((current) => {
+      if (checked) {
+        return [...new Set([...current, ...pageLoanNumbers])];
+      }
+
+      return current.filter((loanNo) => !pageLoanNumbers.has(loanNo));
+    });
   }
 
   return (
@@ -583,7 +590,7 @@ export function AllocationBar({
 
       onDone();
     } catch (error) {
-      notify(error.message);
+      notify(error.message, 'error');
     } finally {
       setBusy(false);
     }

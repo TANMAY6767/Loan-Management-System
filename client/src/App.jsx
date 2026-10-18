@@ -1,10 +1,11 @@
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Bell,
   BriefcaseBusiness,
   CalendarDays,
   Check,
+  CircleAlert,
   ChevronDown,
   CircleHelp,
   CloudUpload,
@@ -42,7 +43,8 @@ function App() {
   const [user, setUser] = useState(getStoredUser);
 
   const [view, setView] = useState('Overview');
-  const [toast, setToast] = useState('');
+  const [toast, setToast] = useState(null);
+  const toastTimer = useRef(null);
   const [refresh, setRefresh] = useState(0);
 
   const [activeAccount, setActiveAccount] = useState(null);
@@ -67,10 +69,13 @@ function App() {
 
   const canManage = ['head', 'coo', 'manager'].includes(user?.role);
 
-  const notify = useCallback((message) => {
-    setToast(message);
-    window.setTimeout(() => setToast(''), 3200);
+  const notify = useCallback((message, type = 'success') => {
+    window.clearTimeout(toastTimer.current);
+    setToast({ message, type });
+    toastTimer.current = window.setTimeout(() => setToast(null), 3200);
   }, []);
+
+  useEffect(() => () => window.clearTimeout(toastTimer.current), []);
 
   const signOut = useCallback(() => {
     logout();
@@ -139,10 +144,6 @@ function App() {
       params.set('office', officeFilter);
     }
 
-    if (view === 'Allocation' && canManage) {
-      params.set('unassigned', 'true');
-    }
-
     return params.toString();
   }, [
     view,
@@ -180,7 +181,7 @@ function App() {
       })
       .catch((error) => {
         if (!ignore) {
-          notify(error.message);
+          notify(error.message, 'error');
         }
       });
 
@@ -220,12 +221,11 @@ function App() {
       .then((data) => {
         if (!ignore) {
           setAccounts(data);
-          setSelected([]);
         }
       })
       .catch((error) => {
         if (!ignore) {
-          notify(error.message);
+          notify(error.message, 'error');
         }
       })
       .finally(() => {
@@ -241,6 +241,7 @@ function App() {
 
   useEffect(() => {
     setPage(1);
+    setSelected([]);
   }, [view, accountSearch, statusFilter, officeFilter]);
 
   function navigateTo(nextView) {
@@ -248,10 +249,13 @@ function App() {
     setMobileNav(false);
   }
 
-  function handleImportComplete(message) {
-    notify(message);
-    refreshData();
-    setView('Accounts');
+  function handleImportComplete(message, type = 'success') {
+    notify(message, type);
+
+    if (type === 'success') {
+      refreshData();
+      setView('Accounts');
+    }
   }
 
   function handleAllocationComplete() {
@@ -449,9 +453,14 @@ function App() {
       )}
 
       {toast && (
-        <div className="toast flex items-center gap-2">
-          <Check size={16} />
-          {toast}
+        <div
+          className={`toast toast-${toast.type} flex items-center gap-2`}
+          role={toast.type === 'error' ? 'alert' : 'status'}
+        >
+          {toast.type === 'error'
+            ? <CircleAlert size={16} />
+            : <Check size={16} />}
+          {toast.message}
         </div>
       )}
     </div>
