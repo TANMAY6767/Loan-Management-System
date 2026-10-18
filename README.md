@@ -4,7 +4,7 @@ A demo recovery workspace for accounts that have already been purchased. It supp
 
 ## Demo Video
 
-[▶ Watch the Shaha Finlease Recovery Prototype Demo](https://drive.google.com/file/d/1ZvzXr08yQPZGIsMM5H2h5xxj1OJcgz-m/view?usp=sharing)
+[▶ Watch the Shaha Finlease Recovery Prototype Demo](https://drive.google.com/file/d/1MwhqZBvs7jl6UR6i1XRE_sOkHVfKF5lB/view?usp=sharing)
 
 ## Requirements
 
