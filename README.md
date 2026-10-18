@@ -2,6 +2,10 @@
 
 A demo recovery workspace for accounts that have already been purchased. It supports CSV import, account allocation, call notes, payment promises, payments, and role-scoped account views.
 
+## Demo Video
+
+[▶ Watch the Shaha Finlease Recovery Prototype Demo](https://drive.google.com/file/d/1ZvzXr08yQPZGIsMM5H2h5xxj1OJcgz-m/view?usp=sharing)
+
 ## Requirements
 
 - Node.js 20 or newer
