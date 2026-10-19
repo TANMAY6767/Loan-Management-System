@@ -21,6 +21,10 @@ const ACCOUNT_STATUSES = [
   'Closed',
   'Settled',
 ];
+const CALL_DISPOSITIONS = [
+  'No answer', 'Busy', 'Connected', 'Wrong number',
+  'Call back requested', 'Refused to pay', 'Promise to pay', 'Dispute raised',
+];
 
 const ACCOUNT_INCLUDE = {
   office: { select: { name: true } },
@@ -82,7 +86,7 @@ function buildAccountFilters(req) {
   }
 
 
-  if (office && ['head', 'coo'].includes(role)) {
+  if (office && ['head', 'coo', 'manager'].includes(role)) {
     where.office = { name: office };
   }
 
@@ -315,12 +319,16 @@ export const getAccountDetails = asyncHandler(async (req, res) => {
 
 export const logCall = asyncHandler(async (req, res) => {
   const { disposition, remarks, followUpAt } = req.body || {};
+  const followUpDate = followUpAt ? new Date(followUpAt) : null;
 
-  if (!disposition) {
+  if (!CALL_DISPOSITIONS.includes(disposition)) {
     throw new ApiError(
       statusType.BAD_REQUEST,
       'Choose a call outcome.'
     );
+  }
+  if (followUpAt && (Number.isNaN(followUpDate.getTime()) || isPastCalendarDateInIndia(followUpDate))) {
+    throw new ApiError(statusType.BAD_REQUEST, 'Choose a follow-up date that is today or later.');
   }
 
   const account = req.account;
@@ -331,7 +339,7 @@ export const logCall = asyncHandler(async (req, res) => {
       userId: req.user.id,
       disposition,
       remarks: remarks || null,
-      followUpAt: followUpAt ? new Date(followUpAt) : null,
+      followUpAt: followUpDate,
     },
   });
 
@@ -357,6 +365,7 @@ export const createPromise = asyncHandler(async (req, res) => {
   const dueDate = new Date(req.body?.dueDate);
 
   if (
+    !Number.isFinite(amount) ||
     !(amount > 0) ||
     Number.isNaN(dueDate.getTime()) ||
     isPastCalendarDateInIndia(dueDate)
@@ -368,6 +377,12 @@ export const createPromise = asyncHandler(async (req, res) => {
   }
 
   const account = req.account;
+  if (['Closed', 'Settled'].includes(account.status)) {
+    throw new ApiError(
+      statusType.CONFLICT,
+      'This account is already resolved and cannot receive a new promise.'
+    );
+  }
 
   const promise = await prisma.pTP.create({
     data: {
@@ -394,11 +409,13 @@ export const createPromise = asyncHandler(async (req, res) => {
 
 export const recordPayment = asyncHandler(async (req, res) => {
   const amount = Number(req.body?.amount);
+  const isSettlement = req.body?.settled === true;
   const paidAt = req.body?.paidAt
     ? new Date(req.body.paidAt)
     : new Date();
 
   if (
+    !Number.isFinite(amount) ||
     !(amount > 0) ||
     Number.isNaN(paidAt.getTime()) ||
     paidAt > new Date()
@@ -410,6 +427,12 @@ export const recordPayment = asyncHandler(async (req, res) => {
   }
 
   const account = req.account;
+  if (['Closed', 'Settled'].includes(account.status)) {
+    throw new ApiError(
+      statusType.CONFLICT,
+      'This account is already resolved. Reopen it before recording another payment.'
+    );
+  }
   const paidDateBounds = getUtcDateBounds(paidAt);
   const result = await prisma.$transaction(async (tx) => {
     const payment = await tx.payment.create({
@@ -429,12 +452,19 @@ export const recordPayment = asyncHandler(async (req, res) => {
     });
     const totalPaid = money(paymentTotal._sum.amount);
 
+    if (!isSettlement && totalPaid > money(account.outstanding) + 0.005) {
+      throw new ApiError(
+        statusType.BAD_REQUEST,
+        'Payment exceeds the remaining outstanding balance.'
+      );
+    }
+
     const status =
-      totalPaid >= money(account.outstanding)
-        ? req.body.settled
-          ? 'Settled'
-          : 'Closed'
-        : 'Part_paid';
+      isSettlement
+        ? 'Settled'
+        : totalPaid >= money(account.outstanding)
+          ? 'Closed'
+          : 'Part_paid';
 
     await tx.account.update({
       where: { loanNo: account.loanNo },
@@ -518,9 +548,10 @@ export const allocateAccounts = asyncHandler(async (req, res) => {
   }
 
 
+  const uniqueLoanNos = [...new Set(loanNos.map(String))];
   const accounts = await prisma.account.findMany({
     where: {
-      loanNo: { in: loanNos },
+      loanNo: { in: uniqueLoanNos },
       AND: [accountScope(req.user)],
     },
     select: {
@@ -531,22 +562,17 @@ export const allocateAccounts = asyncHandler(async (req, res) => {
     },
   });
 
-  if (!accounts.length) {
+  if (!accounts.length || accounts.length !== uniqueLoanNos.length) {
     throw new ApiError(
       statusType.BAD_REQUEST,
       'No accessible accounts were selected.'
     );
   }
 
-
-  const hasOfficeMismatch = accounts.some(
-    (account) => account.officeId !== target.officeId
-  );
-
-  if (hasOfficeMismatch) {
+  if (accounts.some((account) => ['Closed', 'Settled'].includes(account.status))) {
     throw new ApiError(
-      statusType.BAD_REQUEST,
-      'A caller can only receive accounts from their own office.'
+      statusType.CONFLICT,
+      'Resolved accounts cannot be assigned to a caller.'
     );
   }
 
@@ -650,12 +676,19 @@ async function getImportableAccountRecords(rows, user) {
   const records = [];
 
   for (const row of rows) {
-
+    const outstanding = Number(row.outstanding);
+    const originalAmount = row.original_amount ? Number(row.original_amount) : 0;
+    const validDate = (value) => !value || !Number.isNaN(new Date(value).getTime());
     if (
       !row.loan_no ||
       !row.customer_name ||
       !row.mobile ||
-      !row.outstanding
+      !Number.isFinite(outstanding) ||
+      outstanding <= 0 ||
+      !Number.isFinite(originalAmount) ||
+      originalAmount < 0 ||
+      !validDate(row.npa_date) ||
+      !validDate(row.last_payment_date)
     ) {
       continue;
     }

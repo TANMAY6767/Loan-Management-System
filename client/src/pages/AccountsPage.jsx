@@ -9,7 +9,6 @@ import {
   Clock3,
   Filter,
   Search,
-  SlidersHorizontal,
   Users,
   X,
 } from 'lucide-react';
@@ -136,7 +135,7 @@ function AccountToolbar({
   setOffice,
   user,
 }) {
-  const canFilterOffice = ['head', 'coo'].includes(user.role);
+  const canFilterOffice = ['head', 'coo', 'manager'].includes(user.role);
 
   return (
     <div className="table-toolbar">
@@ -149,9 +148,6 @@ function AccountToolbar({
           <OfficeFilter office={office} setOffice={setOffice} />
         )}
 
-        <button className="square-button" title="More filters">
-          <SlidersHorizontal size={16} />
-        </button>
       </div>
     </div>
   );
@@ -619,7 +615,7 @@ export function AllocationBar({
 
             {callers.map((caller) => (
               <option key={caller.id} value={caller.id}>
-                {caller.name} · {caller.office.name}
+                {caller.name} · {caller.office.name} · {caller._count?.accounts || 0} assigned
               </option>
             ))}
           </select>

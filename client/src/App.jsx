@@ -1,13 +1,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Bell,
   BriefcaseBusiness,
   CalendarDays,
   Check,
   CircleAlert,
-  ChevronDown,
-  CircleHelp,
   CloudUpload,
   LayoutDashboard,
   LogOut,
@@ -27,6 +24,10 @@ import { setUnauthorizedHandler } from './services/apiClient.js';
 import { getAccounts } from './services/accountService.js';
 import { logout } from './services/authService.js';
 import { getDashboard, getTeam } from './services/workspaceService.js';
+
+const DEFAULT_ACCOUNT_FILTERS = {
+  query: '', status: 'All', office: 'All offices', page: 1,
+};
 
 function getStoredUser() {
   try {
@@ -50,10 +51,7 @@ function App() {
   const [activeAccount, setActiveAccount] = useState(null);
   const [mobileNav, setMobileNav] = useState(false);
 
-  const [accountSearch, setAccountSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
-  const [officeFilter, setOfficeFilter] = useState('All offices');
-  const [page, setPage] = useState(1);
+  const [accountFilters, setAccountFilters] = useState({});
 
   const [selected, setSelected] = useState([]);
   const [callerId, setCallerId] = useState('');
@@ -73,6 +71,15 @@ function App() {
     : user?.role === 'manager'
       ? 'manager'
       : 'caller';
+
+  const filterKey = `${user?.id || 'guest'}:${view}`;
+  const activeFilters = accountFilters[filterKey] || DEFAULT_ACCOUNT_FILTERS;
+  const updateFilter = useCallback((field, value) => {
+    setAccountFilters((current) => ({
+      ...current,
+      [filterKey]: { ...activeFilters, [field]: value, ...(field === 'page' ? {} : { page: 1 }) },
+    }));
+  }, [filterKey, activeFilters]);
 
   const notify = useCallback((message, type = 'success') => {
     window.clearTimeout(toastTimer.current);
@@ -132,10 +139,10 @@ function App() {
     }
 
     const params = new URLSearchParams({
-      page: String(page),
+      page: String(activeFilters.page),
       pageSize: '25',
-      q: accountSearch,
-      status: statusFilter,
+      q: activeFilters.query,
+      status: activeFilters.status,
     });
 
     if (view === 'Queue') {
@@ -143,19 +150,16 @@ function App() {
     }
 
     if (
-      officeFilter !== 'All offices' &&
-      ['head', 'coo'].includes(user?.role)
+      activeFilters.office !== 'All offices' &&
+      ['head', 'coo', 'manager'].includes(user?.role)
     ) {
-      params.set('office', officeFilter);
+      params.set('office', activeFilters.office);
     }
 
     return params.toString();
   }, [
     view,
-    page,
-    accountSearch,
-    statusFilter,
-    officeFilter,
+    activeFilters,
     user?.role,
     canManage,
   ]);
@@ -244,10 +248,13 @@ function App() {
     };
   }, [token, accountQuery, refresh, notify]);
 
-  useEffect(() => {
-    setPage(1);
-    setSelected([]);
-  }, [view, accountSearch, statusFilter, officeFilter]);
+  useEffect(() => setSelected([]), [
+    view,
+    user?.id,
+    activeFilters.query,
+    activeFilters.status,
+    activeFilters.office,
+  ]);
 
   function navigateTo(nextView) {
     setView(nextView);
@@ -329,7 +336,6 @@ function App() {
           <div className="office-chip">
             <span className="online-dot" />
             <span>{user.office}</span>
-            <ChevronDown size={14} />
           </div>
 
           <div className="profile-row">
@@ -387,17 +393,6 @@ function App() {
               })}
             </div>
 
-            <button className="icon-button help-button" title="Prototype help">
-              <CircleHelp size={18} />
-            </button>
-
-            <button
-              className="notification-button"
-              title="Notifications"
-            >
-              <Bell size={17} />
-              <i />
-            </button>
           </div>
         </header>
 
@@ -405,6 +400,7 @@ function App() {
           {view === 'Overview' && (
             <OverviewPage
               dashboard={dashboard}
+              team={team}
               user={user}
               onNavigate={setView}
               onOpen={setActiveAccount}
@@ -417,14 +413,14 @@ function App() {
               user={user}
               accounts={accounts}
               loading={loading}
-              query={accountSearch}
-              setQuery={setAccountSearch}
-              status={statusFilter}
-              setStatus={setStatusFilter}
-              office={officeFilter}
-              setOffice={setOfficeFilter}
-              page={page}
-              setPage={setPage}
+              query={activeFilters.query}
+              setQuery={(value) => updateFilter('query', value)}
+              status={activeFilters.status}
+              setStatus={(value) => updateFilter('status', value)}
+              office={activeFilters.office}
+              setOffice={(value) => updateFilter('office', value)}
+              page={activeFilters.page}
+              setPage={(value) => updateFilter('page', value)}
               selected={selected}
               setSelected={setSelected}
               onOpen={setActiveAccount}

@@ -5,6 +5,16 @@ import { accountScope } from '../utils/accountScope.js';
 import { markOverduePromises } from '../utils/promiseStatus.js';
 
 const money = (value) => Number(value || 0);
+const INDIA_OFFSET_MS = 330 * 60 * 1000;
+
+function indiaPeriodStart(now, month = false) {
+  const indiaDate = new Date(now.getTime() + INDIA_OFFSET_MS);
+  return new Date(Date.UTC(
+    indiaDate.getUTCFullYear(),
+    indiaDate.getUTCMonth(),
+    month ? 1 : indiaDate.getUTCDate(),
+  ) - INDIA_OFFSET_MS);
+}
 
 export const getTeam = asyncHandler(async (req, res) => {
   const where = ['head', 'coo'].includes(req.user.role)
@@ -26,6 +36,7 @@ export const getTeam = asyncHandler(async (req, res) => {
       officeId: true,
       managerId: true,
       office: { select: { name: true } },
+      _count: { select: { accounts: true } },
     },
   });
 
@@ -62,14 +73,24 @@ export const getDashboard = asyncHandler(async (req, res) => {
     if (account.assignedToId) assigned += 1;
   });
 
-  const paymentTotals = accounts.length
-    ? await prisma.payment.aggregate({
-        where: { accountId: { in: accounts.map((account) => account.loanNo) } },
-        _sum: { amount: true },
-      })
-    : null;
+  const accountIds = accounts.map((account) => account.loanNo);
+  const now = new Date();
+  const monthStart = indiaPeriodStart(now, true);
+  const todayStart = indiaPeriodStart(now);
+  const [paymentTotals, monthPayments, todayPayments, paidByAccount] = accountIds.length
+    ? await Promise.all([
+        prisma.payment.aggregate({ where: { accountId: { in: accountIds } }, _sum: { amount: true } }),
+        prisma.payment.aggregate({ where: { accountId: { in: accountIds }, paidAt: { gte: monthStart } }, _sum: { amount: true } }),
+        prisma.payment.aggregate({ where: { accountId: { in: accountIds }, paidAt: { gte: todayStart } }, _sum: { amount: true } }),
+        prisma.payment.groupBy({ by: ['accountId'], where: { accountId: { in: accountIds } }, _sum: { amount: true } }),
+      ])
+    : [null, null, null, []];
   const totalPaid = money(paymentTotals?._sum.amount);
-  const remainingBalance = Math.max(0, totalOutstanding - totalPaid);
+  const paidLookup = new Map(paidByAccount.map((item) => [item.accountId, money(item._sum.amount)]));
+  const remainingBalance = accounts.reduce((remaining, account) => {
+    if (['Closed', 'Settled'].includes(account.status)) return remaining;
+    return remaining + Math.max(0, money(account.outstanding) - (paidLookup.get(account.loanNo) || 0));
+  }, 0);
 
   const recent = await prisma.callLog.findMany({
     where: { account: { is: scope } },
@@ -85,6 +106,8 @@ export const getDashboard = asyncHandler(async (req, res) => {
     totalAccounts: accounts.length,
     totalOutstanding,
     totalPaid,
+    monthCollected: money(monthPayments?._sum.amount),
+    todayCollected: money(todayPayments?._sum.amount),
     remainingBalance,
     assigned,
     unassigned: accounts.length - assigned,

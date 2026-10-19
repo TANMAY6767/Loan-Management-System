@@ -6,7 +6,6 @@ import {
   ChevronRight,
   Clock3,
   Headphones,
-  MoreHorizontal,
   Phone,
   Wallet,
 } from 'lucide-react';
@@ -21,6 +20,14 @@ const STATUS_ITEMS = [
 ];
 
 const METRIC_CONFIG = [
+  {
+    key: 'collected',
+    icon: Wallet,
+    title: 'Collected this month',
+    value: (dashboard) => dashboard ? cash(dashboard.monthCollected) : '—',
+    foot: (dashboard) => `${cash(dashboard?.totalPaid)} total received to date`,
+    color: 'mint',
+  },
   {
     key: 'accounts',
     icon: BriefcaseBusiness,
@@ -38,7 +45,7 @@ const METRIC_CONFIG = [
     title: 'Remaining balance',
     value: (dashboard) =>
       dashboard ? cash(dashboard.remainingBalance) : '—',
-    foot: (dashboard) => `${cash(dashboard?.totalPaid)} received so far`,
+    foot: (dashboard) => `${cash(dashboard?.totalOutstanding)} original portfolio`,
     color: 'blue',
   },
   {
@@ -114,10 +121,6 @@ function MetricCard({ icon: Icon, title, value, foot, color }) {
         <div className={`metric-icon ${color}`}>
           <Icon size={18} />
         </div>
-
-        <button className="icon-button metric-more">
-          <MoreHorizontal size={19} />
-        </button>
       </div>
 
       <div className="metric-title">{title}</div>
@@ -298,7 +301,7 @@ function EmptyActivity() {
   );
 }
 
-function ActivityPanel({ dashboard, onNavigate, onOpen }) {
+function ActivityPanel({ dashboard, user, onNavigate, onOpen }) {
   const recentActivity = dashboard?.recent || [];
 
   return (
@@ -311,7 +314,7 @@ function ActivityPanel({ dashboard, onNavigate, onOpen }) {
 
         <button
           className="text-button"
-          onClick={() => onNavigate('Accounts')}
+          onClick={() => onNavigate(user.role === 'caller' ? 'Queue' : 'Accounts')}
         >
           All accounts
           <ArrowRight size={14} />
@@ -331,6 +334,34 @@ function ActivityPanel({ dashboard, onNavigate, onOpen }) {
           <EmptyActivity />
         )}
       </div>
+    </section>
+  );
+}
+
+function CallerWorkload({ team, user }) {
+  if (!['head', 'coo', 'manager'].includes(user.role)) return null;
+  const callers = team.filter((member) => member.role === 'caller');
+  const totalAssigned = callers.reduce((sum, member) => sum + (member._count?.accounts || 0), 0);
+  return (
+    <section className="panel workload-panel">
+      <div className="panel-heading">
+        <div>
+          <h3>Caller workload</h3>
+          <p>Accounts currently assigned to each caller</p>
+        </div>
+        <strong>{totalAssigned.toLocaleString('en-IN')} assigned</strong>
+      </div>
+      {callers.length ? (
+        <div className="workload-list">
+          {callers.map((caller) => (
+            <div className="workload-row" key={caller.id}>
+              <span className="workload-avatar">{caller.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}</span>
+              <span className="workload-name"><strong>{caller.name}</strong><small>{caller.office?.name || 'Office not set'}</small></span>
+              <strong className="workload-count">{(caller._count?.accounts || 0).toLocaleString('en-IN')}<small> accounts</small></strong>
+            </div>
+          ))}
+        </div>
+      ) : <div className="workload-empty">No callers in this team yet.</div>}
     </section>
   );
 }
@@ -362,6 +393,7 @@ function WelcomeStrip({ user, onNavigate }) {
 
 export default function OverviewPage({
   dashboard,
+  team,
   user,
   onNavigate,
   onOpen,
@@ -377,10 +409,13 @@ export default function OverviewPage({
 
         <ActivityPanel
           dashboard={dashboard}
+          user={user}
           onNavigate={onNavigate}
           onOpen={onOpen}
         />
       </div>
+
+      <CallerWorkload team={team} user={user} />
 
       <WelcomeStrip user={user} onNavigate={onNavigate} />
     </>

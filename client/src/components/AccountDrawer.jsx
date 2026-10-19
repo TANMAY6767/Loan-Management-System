@@ -180,6 +180,9 @@ function BalanceSummary({ account }) {
     0,
     Number(account.outstanding) - totalPaid
   );
+  const amountRemaining = ['Closed', 'Settled'].includes(account.status)
+    ? 0
+    : remainingBalance;
 
   return (
     <div className="balance-card">
@@ -197,7 +200,7 @@ function BalanceSummary({ account }) {
 
       <div className="balance-remaining">
         <span>Remaining balance</span>
-        <strong>{cash(remainingBalance)}</strong>
+        <strong>{cash(amountRemaining)}</strong>
       </div>
     </div>
   );
@@ -372,7 +375,8 @@ function PromiseForm({ promise, setPromise, busy, onSubmit }) {
 
             <input
               type="number"
-              min="1"
+              min="0.01"
+              step="0.01"
               value={promise.amount}
               onChange={(event) =>
                 updatePromise('amount', event.target.value)
@@ -434,7 +438,8 @@ function PaymentForm({ payment, setPayment, busy, onSubmit }) {
 
             <input
               type="number"
-              min="1"
+              min="0.01"
+              step="0.01"
               value={payment.amount}
               onChange={(event) =>
                 updatePayment('amount', event.target.value)
@@ -479,7 +484,7 @@ function PaymentForm({ payment, setPayment, busy, onSubmit }) {
             }
           />
 
-          Mark as settled when fully paid
+          Complete an approved settlement
         </label>
 
         <button
@@ -505,30 +510,23 @@ function AccountOverview({
   busy,
   onSubmit,
 }) {
+  const resolved = ['Closed', 'Settled'].includes(account.status);
   return (
     <>
       <LoanDetails account={account} />
 
-      <CallForm
-        call={call}
-        setCall={setCall}
-        busy={busy}
-        onSubmit={onSubmit}
-      />
-
-      <PromiseForm
-        promise={promise}
-        setPromise={setPromise}
-        busy={busy}
-        onSubmit={onSubmit}
-      />
-
-      <PaymentForm
-        payment={payment}
-        setPayment={setPayment}
-        busy={busy}
-        onSubmit={onSubmit}
-      />
+      {resolved ? (
+        <div className="resolved-notice">
+          <strong>Account resolved</strong>
+          <span>No further collection actions are available for this account.</span>
+        </div>
+      ) : (
+        <>
+          <CallForm call={call} setCall={setCall} busy={busy} onSubmit={onSubmit} />
+          <PromiseForm promise={promise} setPromise={setPromise} busy={busy} onSubmit={onSubmit} />
+          <PaymentForm payment={payment} setPayment={setPayment} busy={busy} onSubmit={onSubmit} />
+        </>
+      )}
     </>
   );
 }
@@ -642,6 +640,10 @@ export default function AccountDrawer({
 
     try {
       await ACCOUNT_ACTIONS[action](loanNo, body);
+
+      if (action === 'calls') setCall(getInitialCall());
+      if (action === 'promises') setPromise(getInitialPromise());
+      if (action === 'payments') setPayment(getInitialPayment());
 
       notify(successMessage);
       onChanged();
