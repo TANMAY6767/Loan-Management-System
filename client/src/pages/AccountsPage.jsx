@@ -254,7 +254,7 @@ function AccountFollowUp({ promises }) {
 
 function AccountRow({
   account,
-  canManage,
+  selectable,
   selected,
   onToggle,
   onOpen,
@@ -269,7 +269,7 @@ function AccountRow({
 
   return (
     <tr onClick={handleRowClick} className="account-row">
-      {canManage && (
+      {selectable && (
         <td onClick={handleCheckboxClick}>
           <input
             type="checkbox"
@@ -329,6 +329,7 @@ function AccountTableBody({
   loading,
   canManage,
   selected,
+  selectable,
   onToggle,
   onOpen,
 }) {
@@ -369,7 +370,7 @@ function AccountTableBody({
         <AccountRow
           key={account.loanNo}
           account={account}
-          canManage={canManage}
+          selectable={selectable}
           selected={selected}
           onToggle={onToggle}
           onOpen={onOpen}
@@ -383,6 +384,7 @@ function AccountTable({
   accounts,
   loading,
   canManage,
+  selectable,
   selected,
   setSelected,
   onToggle,
@@ -393,15 +395,15 @@ function AccountTable({
       <table>
         <thead>
           <tr>
-            {canManage && (
-              <th className="check-col">
-                <SelectAllCheckbox
-                  accounts={accounts}
-                  selected={selected}
-                  setSelected={setSelected}
-                />
-              </th>
-            )}
+            {selectable && (
+  <th className="check-col">
+    <SelectAllCheckbox
+      accounts={accounts}
+      selected={selected}
+      setSelected={setSelected}
+    />
+  </th>
+)}
 
             <th>Customer</th>
             <th>Loan number</th>
@@ -415,13 +417,13 @@ function AccountTable({
         </thead>
 
         <AccountTableBody
-          accounts={accounts}
-          loading={loading}
-          canManage={canManage}
-          selected={selected}
-          onToggle={onToggle}
-          onOpen={onOpen}
-        />
+  accounts={accounts}
+  loading={loading}
+  selectable={selectable}
+  selected={selected}
+  onToggle={onToggle}
+  onOpen={onOpen}
+/>
       </table>
     </div>
   );
@@ -536,14 +538,14 @@ export default function AccountsPage({
         )}
 
         <AccountTable
-          accounts={rows}
-          loading={loading}
-          canManage={canManage}
-          selected={selected}
-          setSelected={setSelected}
-          onToggle={toggleSelection}
-          onOpen={onOpen}
-        />
+  accounts={rows}
+  loading={loading}
+  selectable={view === 'Allocation'}
+  selected={selected}
+  setSelected={setSelected}
+  onToggle={toggleSelection}
+  onOpen={onOpen}
+/>
 
         <PaginationFooter
           total={total}

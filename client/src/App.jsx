@@ -7,6 +7,7 @@ import {
   Check,
   CircleAlert,
   CloudUpload,
+  Crown,
   FileCheck2,
   LayoutDashboard,
   LogOut,
@@ -373,8 +374,8 @@ function App() {
         }`}
       >
         <div className="brand">
-          <div className="brand-mark">
-            S<span>.</span>
+          <div className="brand-mark" aria-hidden="true">
+            <Crown size={23} strokeWidth={2.1} />
           </div>
 
           <div>
@@ -390,7 +391,7 @@ function App() {
           </button>
         </div>
 
-        <div className="workspace-label">RECOVERY WORKSPACE</div>
+        <div className="workspace-label">COLLECTIONS OPERATIONS</div>
 
         <nav className="nav-list">
           {navItems.map(({ name, icon: Icon }) => (
@@ -475,14 +476,14 @@ function App() {
                 month: 'short',
               })}
             </div>
-
+{user?.role === 'caller' && (
             <div className="notification-wrap">
               <button className="icon-button notification-button" aria-label="Notifications" aria-expanded={notificationOpen} onClick={() => { setNotificationOpen((open) => !open); loadNotifications(); }}>
                 <Bell size={18} />
                 {notifications.unreadCount > 0 && <span className="notification-count">{notifications.unreadCount > 99 ? '99+' : notifications.unreadCount}</span>}
               </button>
               {notificationOpen && <div className="notification-panel">
-                <div className="notification-panel-heading"><strong>Notifications</strong><span>{notifications.unreadCount} unread</span></div>
+                <div className="notification-panel-heading"><strong>Settlement Notifications</strong><span>{notifications.unreadCount} unread</span></div>
                 {notifications.items.length ? notifications.items.map((item) => (
                   <button key={item.id} className={`notification-item ${item.readAt ? '' : 'unread'}`} onClick={() => openNotification(item)}>
                     <span className="notification-dot" />
@@ -490,7 +491,7 @@ function App() {
                   </button>
                 )) : <div className="notification-empty">No notifications yet.</div>}
               </div>}
-            </div>
+            </div>)}
 
           </div>
         </header>

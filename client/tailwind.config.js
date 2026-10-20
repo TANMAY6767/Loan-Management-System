@@ -5,10 +5,11 @@ export default {
     extend: {
       colors: {
         shaha: {
-          green: '#205b48',
-          'green-dark': '#174938',
-          canvas: '#f5f6f4',
-          ink: '#26312d',
+          plum: '#35172d',
+          orange: '#e96f0b',
+          'orange-dark': '#ce5d05',
+          canvas: '#f7f4f6',
+          ink: '#32182b',
         },
       },
       fontFamily: {

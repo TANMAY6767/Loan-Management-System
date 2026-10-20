@@ -1,6 +1,6 @@
 
 import { useState } from 'react';
-import { ArrowRight, CircleHelp } from 'lucide-react';
+import { ArrowRight, CircleHelp, Crown } from 'lucide-react';
 
 import { login } from '../services/authService.js';
 
@@ -15,8 +15,8 @@ const DEMO_PASSWORD = 'shaha123';
 function BrandHeader() {
   return (
     <div className="art-brand">
-      <div className="brand-mark">
-        S<span>.</span>
+      <div className="brand-mark" aria-hidden="true">
+        <Crown size={22} strokeWidth={2.2} />
       </div>
 
       <strong>SHAHA FINLEASE</strong>
@@ -30,17 +30,17 @@ function LoginArtwork() {
       <BrandHeader />
 
       <div className="art-copy">
-        <div className="eyebrow light">RECOVERY, WITH CLARITY</div>
+        <div className="eyebrow light">SHAHA FINLEASE · COLLECTIONS OPERATIONS</div>
 
         <h1>
-          Every conversation
+          Disciplined recovery.
           <br />
-          moves us forward.
+          Clear outcomes.
         </h1>
 
         <p>
-          A calmer workspace for your recovery team to keep every
-          account, promise and payment on track.
+          A focused workspace for retail portfolio management, customer
+          conversations, payment promises and measurable recovery.
         </p>
       </div>
 

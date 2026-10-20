@@ -222,7 +222,7 @@ async function getQueuePriorityIds(where) {
   }
 
   return [...dueByAccount.entries()]
-    .sort((a, b) => a[1] - b[1])
+    .sort((a, b) => a[1] - b[1] || a[0].localeCompare(b[0]))
     .map(([loanNo]) => loanNo);
 }
 
@@ -264,8 +264,8 @@ async function getQueueAccounts(where, skip, pageSize) {
             : {}),
         },
         orderBy: [
-          { status: 'asc' },
-          { customerName: 'asc' },
+          { createdAt: 'asc' },
+          { loanNo: 'asc' },
         ],
         skip: regularSkip,
         take: regularTake,
@@ -290,8 +290,8 @@ export const listAccounts = asyncHandler(async (req, res) => {
       : await prisma.account.findMany({
           where,
           orderBy: [
-            { status: 'asc' },
-            { customerName: 'asc' },
+            { createdAt: 'asc' },
+            { loanNo: 'asc' },
           ],
           skip,
           take: pageSize,
