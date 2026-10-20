@@ -7,6 +7,7 @@ import { ApiError } from '../utils/ApiError.js';
 import { accountScope, dayEnd } from '../utils/accountScope.js';
 import { sendResponse } from '../utils/sendResponse.js';
 import { statusType } from '../utils/statusType.js';
+import { resolvePaymentStatus } from '../utils/accountResolution.js';
 import {
   isPastCalendarDateInIndia,
   markOverduePromises,
@@ -35,6 +36,13 @@ const ACCOUNT_INCLUDE = {
     take: 1,
   },
   _count: { select: { payments: true } },
+  settlements: {
+    include: {
+      requestedBy: { select: { id: true, name: true } },
+      reviewedBy: { select: { id: true, name: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  },
 };
 
 const BATCH_SIZE = 1000;
@@ -407,9 +415,94 @@ export const createPromise = asyncHandler(async (req, res) => {
   );
 });
 
+export const createSettlementOffer = asyncHandler(async (req, res) => {
+  const amount = Number(req.body?.amount);
+  const account = req.account;
+  if (!Number.isFinite(amount) || amount <= 0 || amount > money(account.outstanding)) {
+    throw new ApiError(statusType.BAD_REQUEST, 'Enter a settlement amount above zero and no greater than the original outstanding.');
+  }
+  if (['Closed', 'Settled'].includes(account.status)) {
+    throw new ApiError(statusType.CONFLICT, 'This account is already resolved.');
+  }
+  const activeOffer = await prisma.settlementOffer.findFirst({
+    where: { accountId: account.loanNo, status: { in: ['Pending', 'Approved'] } },
+    select: { id: true },
+  });
+  if (activeOffer) {
+    throw new ApiError(statusType.CONFLICT, 'Resolve the existing settlement request before creating another.');
+  }
+  const offer = await prisma.settlementOffer.create({
+    data: { accountId: account.loanNo, amount, requestedById: req.user.id },
+    include: { requestedBy: { select: { id: true, name: true } } },
+  });
+  return sendResponse(res, true, offer, 'Settlement request submitted for approval.', statusType.CREATED);
+});
+
+export const reviewSettlementOffer = asyncHandler(async (req, res) => {
+  const { decision } = req.body || {};
+  const account = req.account;
+  if (['Closed', 'Settled'].includes(account.status)) {
+    throw new ApiError(statusType.CONFLICT, 'This account is already resolved.');
+  }
+  if (!['approve', 'reject'].includes(decision)) {
+    throw new ApiError(statusType.BAD_REQUEST, 'Choose approve or reject.');
+  }
+  const offer = await prisma.settlementOffer.findFirst({
+    where: { id: req.params.settlementId, accountId: account.loanNo },
+  });
+  if (!offer) throw new ApiError(statusType.NOT_FOUND, 'Settlement request not found.');
+  if (offer.status !== 'Pending') throw new ApiError(statusType.CONFLICT, 'This settlement request has already been reviewed.');
+  if (offer.requestedById === req.user.id) {
+    throw new ApiError(statusType.FORBIDDEN, 'A settlement request must be reviewed by another authorized user.');
+  }
+
+  const reviewed = await prisma.$transaction(async (tx) => {
+    const updateResult = await tx.settlementOffer.updateMany({
+      where: { id: offer.id, status: 'Pending' },
+      data: {
+        status: decision === 'approve' ? 'Approved' : 'Rejected',
+        reviewedById: req.user.id,
+        reviewedAt: new Date(),
+      },
+    });
+    if (updateResult.count !== 1) {
+      throw new ApiError(statusType.CONFLICT, 'This settlement request has already been reviewed.');
+    }
+    const updatedOffer = await tx.settlementOffer.findUnique({
+      where: { id: offer.id },
+      include: {
+        requestedBy: { select: { id: true, name: true } },
+        reviewedBy: { select: { id: true, name: true } },
+      },
+    });
+    await tx.notification.create({
+      data: {
+        userId: offer.requestedById,
+        accountId: account.loanNo,
+        settlementOfferId: offer.id,
+        title: decision === 'approve' ? 'Settlement request approved' : 'Settlement request rejected',
+        message: `Your ₹${money(offer.amount).toLocaleString('en-IN')} settlement request for account ${account.loanNo} was ${decision === 'approve' ? 'approved' : 'rejected'}.`,
+      },
+    });
+    if (decision === 'approve') {
+      const paid = await tx.payment.aggregate({
+        where: { accountId: account.loanNo },
+        _sum: { amount: true },
+      });
+      if (money(paid._sum.amount) >= money(offer.amount)) {
+        await tx.account.update({ where: { loanNo: account.loanNo }, data: { status: 'Settled' } });
+      }
+    }
+    return updatedOffer;
+  });
+  const resultMessage = decision === 'approve'
+    ? 'Settlement request approved.'
+    : 'Settlement request rejected.';
+  return sendResponse(res, true, reviewed, resultMessage);
+});
+
 export const recordPayment = asyncHandler(async (req, res) => {
   const amount = Number(req.body?.amount);
-  const isSettlement = req.body?.settled === true;
   const paidAt = req.body?.paidAt
     ? new Date(req.body.paidAt)
     : new Date();
@@ -452,19 +545,22 @@ export const recordPayment = asyncHandler(async (req, res) => {
     });
     const totalPaid = money(paymentTotal._sum.amount);
 
-    if (!isSettlement && totalPaid > money(account.outstanding) + 0.005) {
+    if (totalPaid > money(account.outstanding) + 0.005) {
       throw new ApiError(
         statusType.BAD_REQUEST,
         'Payment exceeds the remaining outstanding balance.'
       );
     }
 
-    const status =
-      isSettlement
-        ? 'Settled'
-        : totalPaid >= money(account.outstanding)
-          ? 'Closed'
-          : 'Part_paid';
+    const approvedSettlement = await tx.settlementOffer.findFirst({
+      where: { accountId: account.loanNo, status: 'Approved' },
+      orderBy: { reviewedAt: 'desc' },
+    });
+    const status = resolvePaymentStatus({
+      totalPaid,
+      outstanding: money(account.outstanding),
+      approvedSettlementAmount: approvedSettlement ? money(approvedSettlement.amount) : null,
+    });
 
     await tx.account.update({
       where: { loanNo: account.loanNo },

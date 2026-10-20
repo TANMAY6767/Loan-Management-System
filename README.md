@@ -2,6 +2,12 @@
 
 A demo debt-recovery operations workspace for accounts that have already been purchased. It supports portfolio import, caller allocation, customer contact history, payment promises, payment tracking, and role-scoped operational views. The prototype focuses on post-acquisition recovery work; it does not originate loans or manage portfolio purchases.
 
+## Business context
+
+Shaha Finlease describes itself as an NBFC that acquires and manages retail NPA portfolios, using analytics-led decisions and on-ground execution. Its Fair Practices Code emphasizes respectful, non-coercive recovery, calls between 8:00 a.m. and 7:00 p.m. unless otherwise agreed, and management-approved, documented settlements. The prototype now records settlement requests and reviewer decisions before applying settlement status. The UI also surfaces a respectful-contact reminder. See the [company overview](https://www.shahafinlease.com/), [Fair Practices Code](https://shahafinlease.com/Fair-practice-code-policy), and [Grievance Policy](https://www.shahafinlease.com/grievance).
+
+The company grievance policy describes a three-day escalation cadence. This prototype records “Dispute raised” as a call outcome, but does not provide a separate grievance case queue, SLA clock, or escalation workflow.
+
 ## Demo Video
 
 [▶ Watch the Shaha Finlease Recovery Prototype Demo](https://drive.google.com/file/d/1MwhqZBvs7jl6UR6i1XRE_sOkHVfKF5lB/view?usp=sharing)
@@ -38,6 +44,12 @@ A demo debt-recovery operations workspace for accounts that have already been pu
 
    Open `http://localhost:5173`.
 
+5. Run the business-rule and access-scope unit tests:
+
+   ```sh
+   npm test
+   ```
+
 ## Demo logins
 
 All seeded users use the demo password `shaha123`.
@@ -59,7 +71,7 @@ Upload accepts up to 100,000 rows and files up to 20 MB. Headers use the snake_c
 
 - The app starts with already purchased portfolios. Purchase costing, legal/field-agency workflows, and post-settlement processing are outside the prototype scope, so return-on-purchase calculations are not included.
 - A promise remains pending through its due date. Payments recorded from the promise date through its due date count toward the promised amount; it is marked `Kept` once that amount is reached, or `Broken` on the following India calendar day if it is not. Expiry is applied when an account list, account detail, or dashboard is requested; the prototype does not run a background scheduler.
-- Recording payments never changes the loaded outstanding amount. It adds to total paid. An ordinary payment leaves an account `Part_paid` until the original outstanding is fully repaid, when it becomes `Closed`. A payment explicitly marked as completing an approved settlement sets it to `Settled`, even when the agreed settlement is less than the original outstanding. Resolved accounts have no remaining balance for collection reporting. Payments beyond the original balance are rejected unless they complete an explicitly approved settlement.
+- Recording payments never changes the loaded outstanding amount. It adds to total paid. An ordinary payment leaves an account `Part_paid` until the original outstanding is fully repaid, when it becomes `Closed`. A caller can request a settlement, but a different authorized manager or Head/COO must approve it. The account becomes `Settled` once total recorded payments reach the approved amount, even when that amount is below the original outstanding. Resolved accounts have no remaining balance for collection reporting. Payments beyond the original balance are rejected.
 - Dashboard collection KPIs show this month's receipts and all-time receipts. Remaining balance excludes accounts marked `Closed` or `Settled`. Manager and Head/COO dashboard views include current account counts for each caller in their scope.
 - Account search, status, office, and page filters are kept separately for each signed-in user and workspace view.
 - Seed data is synthetic. The common demo password is intentionally simple and must not be reused outside the local prototype.

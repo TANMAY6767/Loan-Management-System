@@ -24,6 +24,12 @@ enum AccountStatus {
   Settled
 }
 
+enum SettlementStatus {
+  Pending
+  Approved
+  Rejected
+}
+
 model Office {
   id        String @id @default(cuid())
   name      String @unique
@@ -49,6 +55,9 @@ model User {
   calls       CallLog[]
   promises    PTP[]
   payments    Payment[]
+  settlementRequests SettlementOffer[] @relation("SettlementRequester")
+  settlementReviews SettlementOffer[] @relation("SettlementReviewer")
+  notifications Notification[]
   createdAt   DateTime @default(now())
 }
 
@@ -76,6 +85,8 @@ model Account {
   calls            CallLog[]
   promises         PTP[]
   payments         Payment[]
+  settlements      SettlementOffer[]
+  notifications    Notification[]
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
@@ -140,4 +151,36 @@ model Payment {
   notes       String?
 
   @@index([accountId, paidAt])
+}
+
+model SettlementOffer {
+  id          String           @id @default(cuid())
+  accountId   String
+  account     Account          @relation(fields: [accountId], references: [loanNo], onDelete: Cascade)
+  amount      Decimal          @db.Decimal(14, 2)
+  status      SettlementStatus @default(Pending)
+  requestedById String
+  requestedBy User             @relation("SettlementRequester", fields: [requestedById], references: [id])
+  reviewedById String?
+  reviewedBy  User?            @relation("SettlementReviewer", fields: [reviewedById], references: [id])
+  reviewedAt  DateTime?
+  createdAt   DateTime         @default(now())
+
+  @@index([accountId, status])
+}
+
+model Notification {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId         String
+  account           Account  @relation(fields: [accountId], references: [loanNo], onDelete: Cascade)
+  settlementOfferId String
+  title             String
+  message           String
+  readAt            DateTime?
+  createdAt         DateTime @default(now())
+
+  @@index([userId, readAt, createdAt])
+  @@index([accountId])
 }

@@ -2,10 +2,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BriefcaseBusiness,
+  Bell,
   CalendarDays,
   Check,
   CircleAlert,
   CloudUpload,
+  FileCheck2,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -17,13 +19,14 @@ import LoginPage from './pages/LoginPage.jsx';
 import OverviewPage from './pages/OverviewPage.jsx';
 import AccountsPage, { AllocationBar } from './pages/AccountsPage.jsx';
 import ImportPage from './pages/ImportPage.jsx';
+import SettlementRequestsPage from './pages/SettlementRequestsPage.jsx';
 import AccountDrawer from './components/AccountDrawer.jsx';
 
 import { displayRole } from './utils/format.js';
 import { setUnauthorizedHandler } from './services/apiClient.js';
 import { getAccounts } from './services/accountService.js';
 import { logout } from './services/authService.js';
-import { getDashboard, getTeam } from './services/workspaceService.js';
+import { getDashboard, getNotifications, getSettlementRequests, getTeam, markNotificationRead } from './services/workspaceService.js';
 
 const DEFAULT_ACCOUNT_FILTERS = {
   query: '', status: 'All', office: 'All offices', page: 1,
@@ -50,6 +53,10 @@ function App() {
 
   const [activeAccount, setActiveAccount] = useState(null);
   const [mobileNav, setMobileNav] = useState(false);
+  const [notifications, setNotifications] = useState({ items: [], unreadCount: 0 });
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [settlementRequests, setSettlementRequests] = useState([]);
+  const [settlementLoading, setSettlementLoading] = useState(false);
 
   const [accountFilters, setAccountFilters] = useState({});
 
@@ -94,11 +101,15 @@ function App() {
     setToken('');
     setUser(null);
     setActiveAccount(null);
+    setNotificationOpen(false);
+    setNotifications({ items: [], unreadCount: 0 });
   }, []);
 
   const signedIn = useCallback((data) => {
     setToken(data.token);
     setUser(data.user);
+    setNotifications({ items: [], unreadCount: 0 });
+    setNotificationOpen(false);
     localStorage.setItem('shaha-user', JSON.stringify(data.user));
     setView('Overview');
   }, []);
@@ -122,6 +133,10 @@ function App() {
             {
               name: 'Allocation',
               icon: Users,
+            },
+            {
+              name: 'Settlement requests',
+              icon: FileCheck2,
             },
             {
               name: 'Import data',
@@ -217,6 +232,28 @@ function App() {
     };
   }, [token, user, refresh, notify]);
 
+  const loadNotifications = useCallback(() => {
+    getNotifications().then(setNotifications).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!token || !user) return undefined;
+    loadNotifications();
+    const timer = window.setInterval(loadNotifications, 20000);
+    return () => window.clearInterval(timer);
+  }, [token, user?.id, loadNotifications]);
+
+  useEffect(() => {
+    if (!token || view !== 'Settlement requests') return undefined;
+    let ignore = false;
+    setSettlementLoading(true);
+    getSettlementRequests()
+      .then((data) => { if (!ignore) setSettlementRequests(data.items || []); })
+      .catch((error) => { if (!ignore) notify(error.message, 'error'); })
+      .finally(() => { if (!ignore) setSettlementLoading(false); });
+    return () => { ignore = true; };
+  }, [token, view, refresh, notify]);
+
   useEffect(() => {
     if (!token || !accountQuery) {
       return;
@@ -277,6 +314,22 @@ function App() {
 
   function handleAccountChanged() {
     refreshData();
+    loadNotifications();
+  }
+
+  async function openNotification(item) {
+    setNotificationOpen(false);
+    try {
+      await markNotificationRead(item.id);
+      setNotifications((current) => ({
+        ...current,
+        items: current.items.map((notification) => notification.id === item.id
+          ? { ...notification, readAt: notification.readAt || new Date().toISOString() }
+          : notification),
+        unreadCount: Math.max(0, current.unreadCount - (item.readAt ? 0 : 1)),
+      }));
+    } catch { /* A refresh on the next poll will reconcile notification state. */ }
+    setActiveAccount(item.accountId);
   }
 
   if (!token || !user) {
@@ -327,6 +380,9 @@ function App() {
                 <span className="nav-count">
                   {dashboard.pendingPromises}
                 </span>
+              )}
+              {name === 'Settlement requests' && dashboard?.pendingSettlementRequests > 0 && (
+                <span className="nav-count">{dashboard.pendingSettlementRequests}</span>
               )}
             </button>
           ))}
@@ -393,6 +449,22 @@ function App() {
               })}
             </div>
 
+            <div className="notification-wrap">
+              <button className="icon-button notification-button" aria-label="Notifications" aria-expanded={notificationOpen} onClick={() => { setNotificationOpen((open) => !open); loadNotifications(); }}>
+                <Bell size={18} />
+                {notifications.unreadCount > 0 && <span className="notification-count">{notifications.unreadCount > 99 ? '99+' : notifications.unreadCount}</span>}
+              </button>
+              {notificationOpen && <div className="notification-panel">
+                <div className="notification-panel-heading"><strong>Notifications</strong><span>{notifications.unreadCount} unread</span></div>
+                {notifications.items.length ? notifications.items.map((item) => (
+                  <button key={item.id} className={`notification-item ${item.readAt ? '' : 'unread'}`} onClick={() => openNotification(item)}>
+                    <span className="notification-dot" />
+                    <span><strong>{item.title}</strong><small>{item.message}</small><em>{new Date(item.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</em></span>
+                  </button>
+                )) : <div className="notification-empty">No notifications yet.</div>}
+              </div>}
+            </div>
+
           </div>
         </header>
 
@@ -432,6 +504,17 @@ function App() {
           {view === 'Import data' && (
             <ImportPage onDone={handleImportComplete} />
           )}
+
+          {view === 'Settlement requests' && canManage && (
+            <SettlementRequestsPage
+              requests={settlementRequests}
+              loading={settlementLoading}
+              notify={notify}
+              onChanged={refreshData}
+              onOpenAccount={setActiveAccount}
+              user={user}
+            />
+          )}
         </div>
       </main>
 
@@ -449,6 +532,7 @@ function App() {
       {activeAccount && (
         <AccountDrawer
           loanNo={activeAccount}
+          user={user}
           onClose={() => setActiveAccount(null)}
           notify={notify}
           onChanged={handleAccountChanged}

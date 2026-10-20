@@ -16,6 +16,13 @@ export const loadAccessibleAccount = asyncHandler(async (req, _res, next) => {
       calls: { include: { user: { select: { name: true } } }, orderBy: { createdAt: 'desc' }, take: 30 },
       promises: { include: { user: { select: { name: true } } }, orderBy: { createdAt: 'desc' } },
       payments: { include: { user: { select: { name: true } } }, orderBy: { paidAt: 'desc' } },
+      settlements: {
+        include: {
+          requestedBy: { select: { id: true, name: true } },
+          reviewedBy: { select: { id: true, name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      },
       allocations: {
         include: {
           user: { select: { name: true, username: true } },

@@ -20,6 +20,14 @@ export function recordPayment(loanNo, payment) {
   return apiClient.post(`/accounts/${encodeURIComponent(loanNo)}/payments`, payment);
 }
 
+export function createSettlementOffer(loanNo, offer) {
+  return apiClient.post(`/accounts/${encodeURIComponent(loanNo)}/settlements`, offer);
+}
+
+export function reviewSettlementOffer(loanNo, settlementId, decision) {
+  return apiClient.post(`/accounts/${encodeURIComponent(loanNo)}/settlements/${encodeURIComponent(settlementId)}/decision`, { decision });
+}
+
 export function allocateAccounts(loanNos, userId) {
   return apiClient.post('/allocations', { loanNos, userId });
 }

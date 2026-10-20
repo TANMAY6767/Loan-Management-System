@@ -50,4 +50,5 @@ async function request(path, { method = 'GET', body, auth = true } = {}) {
 export const apiClient = {
   get: (path, options = {}) => request(path, { ...options, method: 'GET' }),
   post: (path, body, options = {}) => request(path, { ...options, body, method: 'POST' }),
+  patch: (path, body, options = {}) => request(path, { ...options, body, method: 'PATCH' }),
 };

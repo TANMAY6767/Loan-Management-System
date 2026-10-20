@@ -7,3 +7,15 @@ export function getDashboard() {
 export function getTeam() {
   return apiClient.get('/team');
 }
+
+export function getSettlementRequests() {
+  return apiClient.get('/settlements/requests');
+}
+
+export function getNotifications() {
+  return apiClient.get('/notifications');
+}
+
+export function markNotificationRead(notificationId) {
+  return apiClient.patch(`/notifications/${encodeURIComponent(notificationId)}/read`);
+}

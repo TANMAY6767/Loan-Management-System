@@ -8,7 +8,8 @@
     "db:migrate": "npm run db:migrate --prefix server",
     "db:seed": "npm run db:seed --prefix server",
     "db:reset-demo": "npm run db:reset-demo --prefix server",
-    "build": "npm run build --prefix client"
+    "build": "npm run build --prefix client",
+    "test": "npm run test --prefix server"
   },
   "devDependencies": { "concurrently": "^9.1.2" }
 }

@@ -12,9 +12,11 @@ import {
 import { cash, date, dateTime, statusName } from '../utils/format.js';
 import {
   createPromise,
+  createSettlementOffer,
   getAccount,
   logCall,
   recordPayment,
+  reviewSettlementOffer,
 } from '../services/accountService.js';
 
 const ACCOUNT_ACTIONS = {
@@ -56,7 +58,6 @@ function getInitialPayment() {
     amount: '',
     reference: '',
     paidAt: new Date().toISOString().slice(0, 10),
-    settled: false,
   };
 }
 
@@ -95,7 +96,15 @@ function getActivityItems(account) {
     by: item.allocator?.name || 'Allocation',
   }));
 
-  return [...callItems, ...promiseItems, ...allocationItems].sort(
+  const settlementItems = (account.settlements || []).map((item) => ({
+    kind: 'promise',
+    at: item.reviewedAt || item.createdAt,
+    title: `Settlement ${item.status.toLowerCase()} · ${cash(item.amount)}`,
+    body: item.reviewedBy ? `Reviewed by ${item.reviewedBy.name}` : 'Awaiting management review',
+    by: item.reviewedBy?.name || item.requestedBy.name,
+  }));
+
+  return [...callItems, ...promiseItems, ...allocationItems, ...settlementItems].sort(
     (a, b) => new Date(b.at) - new Date(a.at)
   );
 }
@@ -293,6 +302,8 @@ function CallForm({ call, setCall, busy, onSubmit }) {
         Log a call
       </h3>
 
+      <p className="fair-contact-note">Keep contact respectful and non-coercive. Company policy permits calls from 8:00 a.m. to 7:00 p.m. unless the customer has agreed otherwise.</p>
+
       <form onSubmit={handleSubmit}>
         <label>
           Outcome
@@ -411,7 +422,7 @@ function PromiseForm({ promise, setPromise, busy, onSubmit }) {
   );
 }
 
-function PaymentForm({ payment, setPayment, busy, onSubmit }) {
+function PaymentForm({ account, payment, setPayment, busy, onSubmit }) {
   function updatePayment(field, value) {
     setPayment((current) => ({
       ...current,
@@ -430,6 +441,13 @@ function PaymentForm({ payment, setPayment, busy, onSubmit }) {
         <Banknote size={15} />
         Record a payment
       </h3>
+
+      {account.settlements?.some((offer) => offer.status === 'Approved') && (
+        <div className="settlement-approved-note">
+          Approved settlement: {cash(account.settlements.find((offer) => offer.status === 'Approved').amount)}.
+          The account will be marked settled when recorded payments reach this amount.
+        </div>
+      )}
 
       <form onSubmit={handleSubmit}>
         <div className="form-inline">
@@ -475,18 +493,6 @@ function PaymentForm({ payment, setPayment, busy, onSubmit }) {
           />
         </label>
 
-        <label className="check-label">
-          <input
-            type="checkbox"
-            checked={payment.settled}
-            onChange={(event) =>
-              updatePayment('settled', event.target.checked)
-            }
-          />
-
-          Complete an approved settlement
-        </label>
-
         <button
           className="primary-button"
           disabled={busy}
@@ -496,6 +502,62 @@ function PaymentForm({ payment, setPayment, busy, onSubmit }) {
         </button>
       </form>
     </div>
+  );
+}
+
+function SettlementWorkflow({ account, user, busy, onRequest, onReview }) {
+  const [amount, setAmount] = useState('');
+  const offers = account.settlements || [];
+  const activeOffer = offers.find((offer) => ['Pending', 'Approved'].includes(offer.status));
+  const canRequest = ['head', 'coo', 'manager', 'caller'].includes(user.role);
+  const canReview = ['head', 'coo', 'manager'].includes(user.role);
+
+  function submit(event) {
+    event.preventDefault();
+    onRequest(amount, () => setAmount(''));
+  }
+
+  return (
+    <section className="settlement-workflow">
+      <div className="section-title">
+        <h3>Settlement approval</h3>
+        <span>Management review is required</span>
+      </div>
+
+      {offers.length > 0 && (
+        <div className="settlement-list">
+          {offers.map((offer) => (
+            <div className="settlement-row" key={offer.id}>
+              <div>
+                <strong>{cash(offer.amount)}</strong>
+                <span>{offer.status} · requested by {offer.requestedBy.name}</span>
+                {offer.reviewedBy && <small>Reviewed by {offer.reviewedBy.name} · {dateTime(offer.reviewedAt)}</small>}
+              </div>
+              {offer.status === 'Pending' && canReview && offer.requestedById !== user.id && (
+                <div className="settlement-actions">
+                  <button className="secondary-button" disabled={busy} onClick={() => onReview(offer.id, 'reject')}>Reject</button>
+                  <button className="primary-button" disabled={busy} onClick={() => onReview(offer.id, 'approve')}>Approve</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!activeOffer && canRequest && !['Closed', 'Settled'].includes(account.status) && (
+        <form className="settlement-request-form" onSubmit={submit}>
+          <label>
+            Proposed settlement amount
+            <input type="number" min="0.01" step="0.01" max={account.outstanding} value={amount} onChange={(event) => setAmount(event.target.value)} required placeholder="₹ amount" />
+          </label>
+          <button className="secondary-button" disabled={busy}>Request approval</button>
+        </form>
+      )}
+
+      {activeOffer?.status === 'Pending' && (
+        <p className="settlement-hint">This account remains open until an authorized manager reviews the request and the approved amount is received.</p>
+      )}
+    </section>
   );
 }
 
@@ -509,11 +571,15 @@ function AccountOverview({
   setPayment,
   busy,
   onSubmit,
+  user,
+  onSettlementRequest,
+  onSettlementReview,
 }) {
   const resolved = ['Closed', 'Settled'].includes(account.status);
   return (
     <>
       <LoanDetails account={account} />
+      <SettlementWorkflow account={account} user={user} busy={busy} onRequest={onSettlementRequest} onReview={onSettlementReview} />
 
       {resolved ? (
         <div className="resolved-notice">
@@ -524,7 +590,7 @@ function AccountOverview({
         <>
           <CallForm call={call} setCall={setCall} busy={busy} onSubmit={onSubmit} />
           <PromiseForm promise={promise} setPromise={setPromise} busy={busy} onSubmit={onSubmit} />
-          <PaymentForm payment={payment} setPayment={setPayment} busy={busy} onSubmit={onSubmit} />
+          <PaymentForm account={account} payment={payment} setPayment={setPayment} busy={busy} onSubmit={onSubmit} />
         </>
       )}
     </>
@@ -580,6 +646,9 @@ function AccountTabContent({
   setPayment,
   busy,
   onSubmit,
+  user,
+  onSettlementRequest,
+  onSettlementReview,
 }) {
   if (activeTab === 'Overview') {
     return (
@@ -593,6 +662,9 @@ function AccountTabContent({
         setPayment={setPayment}
         busy={busy}
         onSubmit={onSubmit}
+        user={user}
+        onSettlementRequest={onSettlementRequest}
+        onSettlementReview={onSettlementReview}
       />
     );
   }
@@ -606,6 +678,7 @@ function AccountTabContent({
 
 export default function AccountDrawer({
   loanNo,
+  user,
   onClose,
   notify,
   onChanged,
@@ -656,6 +729,37 @@ export default function AccountDrawer({
     }
   }
 
+  async function handleSettlementRequest(amount, reset) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await createSettlementOffer(loanNo, { amount });
+      reset();
+      notify('Settlement request submitted for approval.');
+      onChanged();
+      await reload();
+    } catch (error) {
+      notify(error.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSettlementReview(settlementId, decision) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await reviewSettlementOffer(loanNo, settlementId, decision);
+      notify(decision === 'approve' ? 'Settlement request approved.' : 'Settlement request rejected.');
+      onChanged();
+      await reload();
+    } catch (error) {
+      notify(error.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!account) {
     return <DrawerLoading onClose={onClose} />;
   }
@@ -688,6 +792,7 @@ export default function AccountDrawer({
           <AccountTabContent
             activeTab={activeTab}
             account={account}
+            user={user}
             call={call}
             setCall={setCall}
             promise={promise}
@@ -696,6 +801,8 @@ export default function AccountDrawer({
             setPayment={setPayment}
             busy={busy}
             onSubmit={handleAction}
+            onSettlementRequest={handleSettlementRequest}
+            onSettlementReview={handleSettlementReview}
           />
         </div>
       </aside>
