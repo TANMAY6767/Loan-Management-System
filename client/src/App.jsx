@@ -21,12 +21,13 @@ import AccountsPage, { AllocationBar } from './pages/AccountsPage.jsx';
 import ImportPage from './pages/ImportPage.jsx';
 import SettlementRequestsPage from './pages/SettlementRequestsPage.jsx';
 import AccountDrawer from './components/AccountDrawer.jsx';
+import CallerDetailsModal from './components/CallerDetailsModal.jsx';
 
 import { displayRole } from './utils/format.js';
 import { setUnauthorizedHandler } from './services/apiClient.js';
 import { getAccounts } from './services/accountService.js';
 import { logout } from './services/authService.js';
-import { getDashboard, getNotifications, getSettlementRequests, getTeam, markNotificationRead } from './services/workspaceService.js';
+import { getCallerDetails, getDashboard, getNotifications, getSettlementRequests, getTeam, markNotificationRead } from './services/workspaceService.js';
 
 const DEFAULT_ACCOUNT_FILTERS = {
   query: '', status: 'All', office: 'All offices', page: 1,
@@ -57,6 +58,9 @@ function App() {
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [settlementRequests, setSettlementRequests] = useState([]);
   const [settlementLoading, setSettlementLoading] = useState(false);
+  const [selectedCallerId, setSelectedCallerId] = useState('');
+  const [callerDetails, setCallerDetails] = useState(null);
+  const [callerDetailsLoading, setCallerDetailsLoading] = useState(false);
 
   const [accountFilters, setAccountFilters] = useState({});
 
@@ -101,6 +105,8 @@ function App() {
     setToken('');
     setUser(null);
     setActiveAccount(null);
+    setSelectedCallerId('');
+    setCallerDetails(null);
     setNotificationOpen(false);
     setNotifications({ items: [], unreadCount: 0 });
   }, []);
@@ -108,6 +114,8 @@ function App() {
   const signedIn = useCallback((data) => {
     setToken(data.token);
     setUser(data.user);
+    setSelectedCallerId('');
+    setCallerDetails(null);
     setNotifications({ items: [], unreadCount: 0 });
     setNotificationOpen(false);
     localStorage.setItem('shaha-user', JSON.stringify(data.user));
@@ -317,6 +325,25 @@ function App() {
     loadNotifications();
   }
 
+  async function showCallerDetails(callerId) {
+    setSelectedCallerId(callerId);
+    setCallerDetails(null);
+    setCallerDetailsLoading(true);
+    try {
+      setCallerDetails(await getCallerDetails(callerId));
+    } catch (error) {
+      notify(error.message, 'error');
+      setSelectedCallerId('');
+    } finally {
+      setCallerDetailsLoading(false);
+    }
+  }
+
+  function openAccountFromCaller(loanNo) {
+    setSelectedCallerId('');
+    setActiveAccount(loanNo);
+  }
+
   async function openNotification(item) {
     setNotificationOpen(false);
     try {
@@ -476,6 +503,7 @@ function App() {
               user={user}
               onNavigate={setView}
               onOpen={setActiveAccount}
+              onCallerClick={showCallerDetails}
             />
           )}
 
@@ -536,6 +564,16 @@ function App() {
           onClose={() => setActiveAccount(null)}
           notify={notify}
           onChanged={handleAccountChanged}
+        />
+      )}
+
+      {selectedCallerId && (
+        <CallerDetailsModal
+          caller={callerDetails?.caller || team.find((member) => member.id === selectedCallerId)}
+          details={callerDetails}
+          loading={callerDetailsLoading}
+          onClose={() => setSelectedCallerId('')}
+          onOpenAccount={openAccountFromCaller}
         />
       )}
 

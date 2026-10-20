@@ -8,6 +8,10 @@ export function getTeam() {
   return apiClient.get('/team');
 }
 
+export function getCallerDetails(callerId) {
+  return apiClient.get(`/team/${encodeURIComponent(callerId)}`);
+}
+
 export function getSettlementRequests() {
   return apiClient.get('/settlements/requests');
 }

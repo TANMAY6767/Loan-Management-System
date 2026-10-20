@@ -338,7 +338,7 @@ function ActivityPanel({ dashboard, user, onNavigate, onOpen }) {
   );
 }
 
-function CallerWorkload({ team, user }) {
+function CallerWorkload({ team, user, onCallerClick }) {
   if (!['head', 'coo', 'manager'].includes(user.role)) return null;
   const callers = team.filter((member) => member.role === 'caller');
   const totalAssigned = callers.reduce((sum, member) => sum + (member._count?.accounts || 0), 0);
@@ -347,18 +347,22 @@ function CallerWorkload({ team, user }) {
       <div className="panel-heading">
         <div>
           <h3>Caller workload</h3>
-          <p>Accounts currently assigned to each caller</p>
+          <p>Click a caller to review their assigned portfolio, recovery and activity</p>
         </div>
         <strong>{totalAssigned.toLocaleString('en-IN')} assigned</strong>
       </div>
       {callers.length ? (
         <div className="workload-list">
           {callers.map((caller) => (
-            <div className="workload-row" key={caller.id}>
+            <button className="workload-row" key={caller.id} onClick={() => onCallerClick(caller.id)}>
               <span className="workload-avatar">{caller.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}</span>
               <span className="workload-name"><strong>{caller.name}</strong><small>{caller.office?.name || 'Office not set'}</small></span>
               <strong className="workload-count">{(caller._count?.accounts || 0).toLocaleString('en-IN')}<small> accounts</small></strong>
-            </div>
+              <span className="caller-recovery-ring" style={{ '--progress': `${Math.min(100, Math.max(0, caller.recoveryPercent || 0))}%` }}>
+                <span><strong>{caller.recoveryPercent == null ? 'N/A' : `${Math.round(caller.recoveryPercent)}%`}</strong><small>{caller.recoveryPercent == null ? 'no accounts' : 'recovered'}</small></span>
+              </span>
+              <ChevronRight className="caller-detail-arrow" size={17} />
+            </button>
           ))}
         </div>
       ) : <div className="workload-empty">No callers in this team yet.</div>}
@@ -397,6 +401,7 @@ export default function OverviewPage({
   user,
   onNavigate,
   onOpen,
+  onCallerClick,
 }) {
   return (
     <>
@@ -415,7 +420,7 @@ export default function OverviewPage({
         />
       </div>
 
-      <CallerWorkload team={team} user={user} />
+      <CallerWorkload team={team} user={user} onCallerClick={onCallerClick} />
 
       <WelcomeStrip user={user} onNavigate={onNavigate} />
     </>

@@ -41,7 +41,158 @@ export const getTeam = asyncHandler(async (req, res) => {
     },
   });
 
-  return sendResponse(res, true, users, 'Team loaded.');
+  const callerIds = users.filter((user) => user.role === 'caller').map((user) => user.id);
+  const accounts = callerIds.length
+    ? await prisma.account.findMany({
+        where: { assignedToId: { in: callerIds } },
+        select: { loanNo: true, assignedToId: true, outstanding: true, status: true },
+      })
+    : [];
+  const accountIds = accounts.map((account) => account.loanNo);
+  const paidByAccount = accountIds.length
+    ? await prisma.payment.groupBy({
+        by: ['accountId'],
+        where: { accountId: { in: accountIds } },
+        _sum: { amount: true },
+      })
+    : [];
+  const paidLookup = new Map(paidByAccount.map((payment) => [payment.accountId, money(payment._sum.amount)]));
+  const recoveryByCaller = new Map();
+  for (const account of accounts) {
+    const current = recoveryByCaller.get(account.assignedToId) || {
+      assignedOutstanding: 0,
+      recovered: 0,
+      remaining: 0,
+    };
+    const paid = paidLookup.get(account.loanNo) || 0;
+    current.assignedOutstanding += money(account.outstanding);
+    current.recovered += paid;
+    if (!['Closed', 'Settled'].includes(account.status)) {
+      current.remaining += Math.max(0, money(account.outstanding) - paid);
+    }
+    recoveryByCaller.set(account.assignedToId, current);
+  }
+  const team = users.map((member) => {
+    if (member.role !== 'caller') return member;
+    const metrics = recoveryByCaller.get(member.id) || {
+      assignedOutstanding: 0,
+      recovered: 0,
+      remaining: 0,
+    };
+    return {
+      ...member,
+      assignedOutstanding: metrics.assignedOutstanding,
+      recovered: metrics.recovered,
+      remaining: metrics.remaining,
+      recoveryPercent: metrics.assignedOutstanding > 0
+        ? (metrics.recovered / metrics.assignedOutstanding) * 100
+        : null,
+    };
+  });
+
+  return sendResponse(res, true, team, 'Team loaded.');
+});
+
+export const getCallerDetails = asyncHandler(async (req, res) => {
+  const caller = await prisma.user.findFirst({
+    where: {
+      id: req.params.callerId,
+      role: 'caller',
+      ...(['head', 'coo'].includes(req.user.role) ? {} : { managerId: req.user.id }),
+    },
+    select: {
+      id: true,
+      name: true,
+      username: true,
+      role: true,
+      office: { select: { name: true } },
+      manager: { select: { id: true, name: true } },
+      createdAt: true,
+    },
+  });
+  if (!caller) throw new ApiError(404, 'Caller not found in your team.');
+
+  const scope = accountScope(req.user);
+  const [accounts, calls, payments, promises, allocations, settlementOffers] = await Promise.all([
+    prisma.account.findMany({
+      where: { assignedToId: caller.id, AND: [scope] },
+      select: {
+        loanNo: true,
+        customerName: true,
+        mobile: true,
+        product: true,
+        outstanding: true,
+        status: true,
+        office: { select: { name: true } },
+        updatedAt: true,
+      },
+      orderBy: { customerName: 'asc' },
+    }),
+    prisma.callLog.findMany({
+      where: { userId: caller.id, account: { is: scope } },
+      select: { id: true, accountId: true, disposition: true, remarks: true, followUpAt: true, createdAt: true, account: { select: { customerName: true } } },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.payment.findMany({
+      where: { userId: caller.id, account: { is: scope } },
+      select: { id: true, accountId: true, amount: true, reference: true, notes: true, paidAt: true, account: { select: { customerName: true } } },
+      orderBy: { paidAt: 'desc' },
+    }),
+    prisma.pTP.findMany({
+      where: { userId: caller.id, account: { is: scope } },
+      select: { id: true, accountId: true, amount: true, dueDate: true, status: true, createdAt: true, account: { select: { customerName: true } } },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.allocation.findMany({
+      where: { userId: caller.id, account: { is: scope } },
+      select: { id: true, accountId: true, allocatedAt: true, allocator: { select: { name: true } }, account: { select: { customerName: true } } },
+      orderBy: { allocatedAt: 'desc' },
+    }),
+    prisma.settlementOffer.findMany({
+      where: { requestedById: caller.id, account: { is: scope } },
+      select: { id: true, accountId: true, amount: true, status: true, createdAt: true, account: { select: { customerName: true } } },
+      orderBy: { createdAt: 'desc' },
+    }),
+  ]);
+
+  const accountIds = accounts.map((account) => account.loanNo);
+  const paidByAccount = accountIds.length
+    ? await prisma.payment.groupBy({
+        by: ['accountId'],
+        where: { accountId: { in: accountIds } },
+        _sum: { amount: true },
+      })
+    : [];
+  const paidLookup = new Map(paidByAccount.map((payment) => [payment.accountId, money(payment._sum.amount)]));
+  const assignedOutstanding = accounts.reduce((total, account) => total + money(account.outstanding), 0);
+  const recovered = accounts.reduce((total, account) => total + (paidLookup.get(account.loanNo) || 0), 0);
+  const remaining = accounts.reduce((total, account) => {
+    if (['Closed', 'Settled'].includes(account.status)) return total;
+    return total + Math.max(0, money(account.outstanding) - (paidLookup.get(account.loanNo) || 0));
+  }, 0);
+  const recoveryByCaller = payments.reduce((total, payment) => total + money(payment.amount), 0);
+
+  const activity = [
+    ...calls.map((item) => ({ id: `call-${item.id}`, type: 'Call', title: item.disposition, description: item.remarks, accountId: item.accountId, customerName: item.account.customerName, createdAt: item.createdAt, followUpAt: item.followUpAt })),
+    ...payments.map((item) => ({ id: `payment-${item.id}`, type: 'Payment', title: `Payment recorded · ₹${money(item.amount).toLocaleString('en-IN')}`, description: item.reference || item.notes, amount: money(item.amount), accountId: item.accountId, customerName: item.account.customerName, createdAt: item.paidAt })),
+    ...promises.map((item) => ({ id: `promise-${item.id}`, type: 'Promise to pay', title: `Promise recorded · ₹${money(item.amount).toLocaleString('en-IN')}`, description: `${item.status} · due ${item.dueDate.toLocaleDateString('en-IN')}`, accountId: item.accountId, customerName: item.account.customerName, createdAt: item.createdAt })),
+    ...allocations.map((item) => ({ id: `allocation-${item.id}`, type: 'Allocation', title: 'Account assigned', description: `Assigned by ${item.allocator.name}`, accountId: item.accountId, customerName: item.account.customerName, createdAt: item.allocatedAt })),
+    ...settlementOffers.map((item) => ({ id: `settlement-${item.id}`, type: 'Settlement request', title: `Settlement request · ${item.status}`, description: `Proposed ₹${money(item.amount).toLocaleString('en-IN')}`, amount: money(item.amount), accountId: item.accountId, customerName: item.account.customerName, createdAt: item.createdAt })),
+  ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  return sendResponse(res, true, {
+    caller,
+    accounts: accounts.map((account) => ({ ...account, paid: paidLookup.get(account.loanNo) || 0 })),
+    metrics: {
+      assignedAccounts: accounts.length,
+      assignedOutstanding,
+      recovered,
+      recoveryByCaller,
+      remaining,
+      recoveryPercent: assignedOutstanding > 0 ? (recovered / assignedOutstanding) * 100 : null,
+    },
+    activity,
+  }, 'Caller details loaded.');
 });
 
 export const getSettlementRequests = asyncHandler(async (req, res) => {
