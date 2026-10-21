@@ -165,6 +165,60 @@ function MetricsGrid({ dashboard, user }) {
   );
 }
 
+function RecoveryProgress({ dashboard }) {
+  const total = Math.max(0, Number(dashboard?.totalOutstanding) || 0);
+  const recovered = Math.max(0, Number(dashboard?.totalPaid) || 0);
+  const pending = Math.max(0, Number(dashboard?.remainingBalance) || 0);
+  const recoveredInBar = Math.min(recovered, total);
+  const pendingInBar = Math.min(pending, Math.max(0, total - recoveredInBar));
+  const resolved = Math.max(0, total - recoveredInBar - pendingInBar);
+  const width = (amount) => total > 0 ? `${(amount / total) * 100}%` : '0%';
+
+  return (
+    <section className="panel recovery-progress-panel" aria-labelledby="recovery-progress-title">
+      <div className="recovery-progress-heading">
+        <div>
+          <h3 id="recovery-progress-title">Portfolio recovery</h3>
+          <p>Recovered and pending amounts against total outstanding</p>
+        </div>
+        <div className="recovery-total">
+          <span>Total outstanding</span>
+          <strong>{dashboard ? cash(total) : '—'}</strong>
+        </div>
+      </div>
+
+      <div
+        className="recovery-progress-track"
+        role="img"
+        aria-label={`Total outstanding ${cash(total)}. Recovered ${cash(recovered)}. Pending ${cash(pending)}. Resolved or adjusted ${cash(resolved)}.`}
+      >
+        <span className="recovery-segment recovered" style={{ width: width(recoveredInBar) }} />
+        <span className="recovery-segment pending" style={{ width: width(pendingInBar) }} />
+        <span className="recovery-segment resolved" style={{ width: width(resolved) }} />
+      </div>
+
+      <div className="recovery-progress-legend">
+        <div className="recovery-legend-item">
+          <span className="recovery-legend-dot recovered" />
+          <span>Recovered</span>
+          <strong>{dashboard ? cash(recovered) : '—'}</strong>
+        </div>
+        <div className="recovery-legend-item">
+          <span className="recovery-legend-dot pending" />
+          <span>Pending</span>
+          <strong>{dashboard ? cash(pending) : '—'}</strong>
+        </div>
+        <div className="recovery-legend-item">
+          <span className="recovery-legend-dot resolved" />
+          <span>Resolved / adjusted</span>
+          <strong>{dashboard ? cash(resolved) : '—'}</strong>
+        </div>
+      </div>
+      <p className="recovery-progress-note">Resolved / adjusted includes closed accounts and approved settlements below the original outstanding amount.</p>
+    </section>
+  );
+}
+
 function StatusLegend({ dashboard }) {
   const statuses = dashboard?.statuses;
 
@@ -405,9 +459,13 @@ export default function OverviewPage({
 }) {
   return (
     <>
+    
       <PageHeading user={user} onNavigate={onNavigate} />
+      <RecoveryProgress dashboard={dashboard} />
 
       <MetricsGrid dashboard={dashboard} user={user} />
+
+      
 
       <div className="overview-grid">
         <PortfolioSnapshot dashboard={dashboard} />

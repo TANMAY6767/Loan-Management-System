@@ -78,6 +78,7 @@ function App() {
   });
 
   const canManage = ['head', 'coo', 'manager'].includes(user?.role);
+  const canReviewClosures = user?.role === 'head';
   const roleTheme = ['head', 'coo'].includes(user?.role)
     ? 'head'
     : user?.role === 'manager'
@@ -143,10 +144,10 @@ function App() {
               name: 'Allocation',
               icon: Users,
             },
-            {
+            ...(canReviewClosures ? [{
               name: 'Settlement requests',
               icon: FileCheck2,
-            },
+            }] : []),
             {
               name: 'Import data',
               icon: CloudUpload,
@@ -154,7 +155,7 @@ function App() {
           ]
         : []),
     ],
-    [user?.role, canManage]
+    [user?.role, canManage, canReviewClosures]
   );
 
   const accountQuery = useMemo(() => {
@@ -534,7 +535,7 @@ function App() {
             <ImportPage onDone={handleImportComplete} />
           )}
 
-          {view === 'Settlement requests' && canManage && (
+          {view === 'Settlement requests' && canReviewClosures && (
             <SettlementRequestsPage
               requests={settlementRequests}
               loading={settlementLoading}

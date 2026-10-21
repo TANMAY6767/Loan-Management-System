@@ -30,6 +30,11 @@ enum SettlementStatus {
   Rejected
 }
 
+enum ClosureType {
+  Settlement
+  Closure
+}
+
 model Office {
   id        String @id @default(cuid())
   name      String @unique
@@ -158,6 +163,7 @@ model SettlementOffer {
   accountId   String
   account     Account          @relation(fields: [accountId], references: [loanNo], onDelete: Cascade)
   amount      Decimal          @db.Decimal(14, 2)
+  type        ClosureType      @default(Settlement)
   status      SettlementStatus @default(Pending)
   requestedById String
   requestedBy User             @relation("SettlementRequester", fields: [requestedById], references: [id])

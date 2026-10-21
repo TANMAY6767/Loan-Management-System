@@ -417,9 +417,13 @@ export const createPromise = asyncHandler(async (req, res) => {
 
 export const createSettlementOffer = asyncHandler(async (req, res) => {
   const amount = Number(req.body?.amount);
+  const type = req.body?.type || 'Settlement';
   const account = req.account;
+  if (!['Settlement', 'Closure'].includes(type)) {
+    throw new ApiError(statusType.BAD_REQUEST, 'Choose settlement or regular closure.');
+  }
   if (!Number.isFinite(amount) || amount <= 0 || amount > money(account.outstanding)) {
-    throw new ApiError(statusType.BAD_REQUEST, 'Enter a settlement amount above zero and no greater than the original outstanding.');
+    throw new ApiError(statusType.BAD_REQUEST, 'Enter an agreed amount above zero and no greater than the outstanding balance.');
   }
   if (['Closed', 'Settled'].includes(account.status)) {
     throw new ApiError(statusType.CONFLICT, 'This account is already resolved.');
@@ -432,10 +436,10 @@ export const createSettlementOffer = asyncHandler(async (req, res) => {
     throw new ApiError(statusType.CONFLICT, 'Resolve the existing settlement request before creating another.');
   }
   const offer = await prisma.settlementOffer.create({
-    data: { accountId: account.loanNo, amount, requestedById: req.user.id },
+    data: { accountId: account.loanNo, amount, type, requestedById: req.user.id },
     include: { requestedBy: { select: { id: true, name: true } } },
   });
-  return sendResponse(res, true, offer, 'Settlement request submitted for approval.', statusType.CREATED);
+  return sendResponse(res, true, offer, `${type === 'Settlement' ? 'Settlement' : 'Closure'} request submitted for approval.`, statusType.CREATED);
 });
 
 export const reviewSettlementOffer = asyncHandler(async (req, res) => {
@@ -480,8 +484,8 @@ export const reviewSettlementOffer = asyncHandler(async (req, res) => {
         userId: offer.requestedById,
         accountId: account.loanNo,
         settlementOfferId: offer.id,
-        title: decision === 'approve' ? 'Settlement request approved' : 'Settlement request rejected',
-        message: `Your ₹${money(offer.amount).toLocaleString('en-IN')} settlement request for account ${account.loanNo} was ${decision === 'approve' ? 'approved' : 'rejected'}.`,
+        title: `${offer.type === 'Settlement' ? 'Settlement' : 'Closure'} request ${decision === 'approve' ? 'approved' : 'rejected'}`,
+        message: `Your ₹${money(offer.amount).toLocaleString('en-IN')} ${offer.type === 'Settlement' ? 'settlement' : 'closure'} request for account ${account.loanNo} was ${decision === 'approve' ? 'approved' : 'rejected'}.`,
       },
     });
     if (decision === 'approve') {
@@ -489,9 +493,13 @@ export const reviewSettlementOffer = asyncHandler(async (req, res) => {
         where: { accountId: account.loanNo },
         _sum: { amount: true },
       });
-      if (money(paid._sum.amount) >= money(offer.amount)) {
-        await tx.account.update({ where: { loanNo: account.loanNo }, data: { status: 'Settled' } });
-      }
+      const totalPaid = money(paid._sum.amount);
+      await tx.account.update({
+        where: { loanNo: account.loanNo },
+        data: { status: totalPaid >= money(offer.amount)
+          ? (offer.type === 'Settlement' ? 'Settled' : 'Closed')
+          : 'Part_paid' },
+      });
     }
     return updatedOffer;
   });
@@ -552,14 +560,15 @@ export const recordPayment = asyncHandler(async (req, res) => {
       );
     }
 
-    const approvedSettlement = await tx.settlementOffer.findFirst({
+    const approvedOffer = await tx.settlementOffer.findFirst({
       where: { accountId: account.loanNo, status: 'Approved' },
       orderBy: { reviewedAt: 'desc' },
+      select: { amount: true, type: true },
     });
     const status = resolvePaymentStatus({
       totalPaid,
       outstanding: money(account.outstanding),
-      approvedSettlementAmount: approvedSettlement ? money(approvedSettlement.amount) : null,
+      approvedOffer: approvedOffer ? { amount: money(approvedOffer.amount), type: approvedOffer.type } : null,
     });
 
     await tx.account.update({

@@ -26,7 +26,7 @@ export default function SettlementRequestsPage({ requests, loading, notify, onCh
     setBusyId(item.id);
     try {
       await reviewSettlementOffer(item.accountId, item.id, decision);
-      notify(`Settlement request ${decision === 'approve' ? 'approved' : 'rejected'}.`);
+      notify(`${item.type === 'Settlement' ? 'Settlement' : 'Closure'} request ${decision === 'approve' ? 'approved' : 'rejected'}.`);
       onChanged();
     } catch (error) {
       notify(error.message, 'error');
@@ -40,8 +40,8 @@ export default function SettlementRequestsPage({ requests, loading, notify, onCh
       <div className="page-heading">
         <div>
           <div className="eyebrow">REVIEW WORKFLOW</div>
-          <h1>Settlement requests</h1>
-          <p>Review caller proposals and record a clear decision for each account.</p>
+          <h1>Closure and settlement requests</h1>
+          <p>Head of Collections approval queue for discounted closures and settlements.</p>
         </div>
         <div className="settlement-open-count"><Clock3 size={16} /> {requests.length} awaiting review</div>
       </div>
@@ -61,7 +61,7 @@ export default function SettlementRequestsPage({ requests, loading, notify, onCh
                     <strong>{item.account.customerName}</strong><span>{item.account.loanNo}</span>
                   </button>
                   <div className="settlement-request-facts">
-                    <div><small>Proposed settlement</small><strong>{cash(item.amount)}</strong></div>
+                    <div><small>{item.type === 'Settlement' ? 'Proposed settlement' : 'Proposed closure'}</small><strong>{cash(item.amount)}</strong></div>
                     <div><small>Outstanding</small><strong>{cash(item.account.outstanding)}</strong></div>
                     <div><small>Requested by</small><strong>{item.requestedBy.name}</strong><span>{item.requestedBy.office?.name || 'Office not set'}</span></div>
                     <div><small>Assigned caller</small><strong>{item.account.assignedTo?.name || 'Unassigned'}</strong><span>{item.account.assignedTo?.office?.name || item.account.office?.name}</span></div>

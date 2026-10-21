@@ -28,7 +28,7 @@ router.get('/accounts/:loanNo', loadAccessibleAccount, getAccountDetails);
 router.post('/accounts/:loanNo/calls', loadAccessibleAccount, logCall);
 router.post('/accounts/:loanNo/promises', loadAccessibleAccount, createPromise);
 router.post('/accounts/:loanNo/settlements', requireRoles('head', 'coo', 'manager', 'caller'), loadAccessibleAccount, createSettlementOffer);
-router.post('/accounts/:loanNo/settlements/:settlementId/decision', requireRoles('head', 'coo', 'manager'), loadAccessibleAccount, reviewSettlementOffer);
+router.post('/accounts/:loanNo/settlements/:settlementId/decision', requireRoles('head'), loadAccessibleAccount, reviewSettlementOffer);
 router.post('/accounts/:loanNo/payments', loadAccessibleAccount, recordPayment);
 
 export default router;

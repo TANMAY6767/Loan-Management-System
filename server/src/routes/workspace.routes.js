@@ -8,7 +8,7 @@ router.use(authenticate);
 router.get('/dashboard', getDashboard);
 router.get('/team', getTeam);
 router.get('/team/:callerId', requireRoles('head', 'coo', 'manager'), getCallerDetails);
-router.get('/settlements/requests', requireRoles('head', 'coo', 'manager'), getSettlementRequests);
+router.get('/settlements/requests', requireRoles('head'), getSettlementRequests);
 router.get('/notifications', getNotifications);
 router.patch('/notifications/:notificationId/read', markNotificationRead);
 

@@ -99,7 +99,7 @@ function getActivityItems(account) {
   const settlementItems = (account.settlements || []).map((item) => ({
     kind: 'promise',
     at: item.reviewedAt || item.createdAt,
-    title: `Settlement ${item.status.toLowerCase()} · ${cash(item.amount)}`,
+    title: `${item.type === 'Settlement' ? 'Settlement' : 'Regular closure'} ${item.status.toLowerCase()} · ${cash(item.amount)}`,
     body: item.reviewedBy ? `Reviewed by ${item.reviewedBy.name}` : 'Awaiting management review',
     by: item.reviewedBy?.name || item.requestedBy.name,
   }));
@@ -444,8 +444,8 @@ function PaymentForm({ account, payment, setPayment, busy, onSubmit }) {
 
       {account.settlements?.some((offer) => offer.status === 'Approved') && (
         <div className="settlement-approved-note">
-          Approved settlement: {cash(account.settlements.find((offer) => offer.status === 'Approved').amount)}.
-          The account will be marked settled when recorded payments reach this amount.
+          Approved {account.settlements.find((offer) => offer.status === 'Approved').type === 'Settlement' ? 'settlement' : 'regular closure'} amount: {cash(account.settlements.find((offer) => offer.status === 'Approved').amount)}.
+          The account status changes after recorded payments reach this amount.
         </div>
       )}
 
@@ -507,21 +507,22 @@ function PaymentForm({ account, payment, setPayment, busy, onSubmit }) {
 
 function SettlementWorkflow({ account, user, busy, onRequest, onReview }) {
   const [amount, setAmount] = useState('');
+  const [type, setType] = useState('Settlement');
   const offers = account.settlements || [];
   const activeOffer = offers.find((offer) => ['Pending', 'Approved'].includes(offer.status));
   const canRequest = ['head', 'coo', 'manager', 'caller'].includes(user.role);
-  const canReview = ['head', 'coo', 'manager'].includes(user.role);
+  const canReview = user.role === 'head';
 
   function submit(event) {
     event.preventDefault();
-    onRequest(amount, () => setAmount(''));
+    onRequest({ amount, type }, () => setAmount(''));
   }
 
   return (
     <section className="settlement-workflow">
       <div className="section-title">
-        <h3>Settlement approval</h3>
-        <span>Management review is required</span>
+        <h3>Closure and settlement approval</h3>
+        <span>Head of Collections approval is required</span>
       </div>
 
       {offers.length > 0 && (
@@ -529,7 +530,7 @@ function SettlementWorkflow({ account, user, busy, onRequest, onReview }) {
           {offers.map((offer) => (
             <div className="settlement-row" key={offer.id}>
               <div>
-                <strong>{cash(offer.amount)}</strong>
+                <strong>{offer.type === 'Settlement' ? 'Settlement' : 'Regular closure'} · {cash(offer.amount)}</strong>
                 <span>{offer.status} · requested by {offer.requestedBy.name}</span>
                 {offer.reviewedBy && <small>Reviewed by {offer.reviewedBy.name} · {dateTime(offer.reviewedAt)}</small>}
               </div>
@@ -547,7 +548,12 @@ function SettlementWorkflow({ account, user, busy, onRequest, onReview }) {
       {!activeOffer && canRequest && !['Closed', 'Settled'].includes(account.status) && (
         <form className="settlement-request-form" onSubmit={submit}>
           <label>
-            Proposed settlement amount
+            <span>Request type</span>
+            <select value={type} onChange={(event) => setType(event.target.value)}>
+              <option value="Settlement">Settlement</option>
+              <option value="Closure">Regular closure</option>
+            </select>
+            <span>Agreed payment amount</span>
             <input type="number" min="0.01" step="0.01" max={account.outstanding} value={amount} onChange={(event) => setAmount(event.target.value)} required placeholder="₹ amount" />
           </label>
           <button className="secondary-button" disabled={busy}>Request approval</button>
@@ -555,7 +561,7 @@ function SettlementWorkflow({ account, user, busy, onRequest, onReview }) {
       )}
 
       {activeOffer?.status === 'Pending' && (
-        <p className="settlement-hint">This account remains open until an authorized manager reviews the request and the approved amount is received.</p>
+        <p className="settlement-hint">The account stays Part Payment until the approved amount is fully recovered. It then becomes {activeOffer?.type === 'Settlement' ? 'Settled' : 'Closed'}.</p>
       )}
     </section>
   );
@@ -729,13 +735,13 @@ export default function AccountDrawer({
     }
   }
 
-  async function handleSettlementRequest(amount, reset) {
+  async function handleSettlementRequest(offer, reset) {
     if (busy) return;
     setBusy(true);
     try {
-      await createSettlementOffer(loanNo, { amount });
+      await createSettlementOffer(loanNo, offer);
       reset();
-      notify('Settlement request submitted for approval.');
+      notify(`${offer.type === 'Settlement' ? 'Settlement' : 'Closure'} request submitted for approval.`);
       onChanged();
       await reload();
     } catch (error) {
