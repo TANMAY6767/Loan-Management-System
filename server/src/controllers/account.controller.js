@@ -471,8 +471,8 @@ export const reviewSettlementOffer = asyncHandler(async (req, res) => {
     if (req.user.role !== 'manager') {
       throw new ApiError(statusType.FORBIDDEN, 'A manager must review this request before Head of Collections.');
     }
-    if (account.officeId !== req.user.officeId || account.assignedTo?.managerId !== req.user.id) {
-      throw new ApiError(statusType.FORBIDDEN, 'Only the assigned manager in this branch can review this request.');
+    if (account.officeId !== req.user.officeId) {
+      throw new ApiError(statusType.FORBIDDEN, 'Only a manager in this branch can review this request.');
     }
   } else if (req.user.role !== 'head') {
     throw new ApiError(statusType.FORBIDDEN, 'Only Head of Collections can complete the final review.');
@@ -537,9 +537,12 @@ export const reviewSettlementOffer = asyncHandler(async (req, res) => {
       const totalPaid = money(paid._sum.amount);
       await tx.account.update({
         where: { loanNo: account.loanNo },
-        data: { status: totalPaid >= money(offer.amount)
-          ? (offer.type === 'Settlement' ? 'Settled' : 'Closed')
-          : 'Part_paid' },
+        data: { status: resolvePaymentStatus({
+          totalPaid,
+          outstanding: money(account.outstanding),
+          approvedOffer: { amount: money(offer.amount), type: offer.type },
+          currentStatus: account.status,
+        }) },
       });
     }
     return updatedOffer;
@@ -610,6 +613,7 @@ export const recordPayment = asyncHandler(async (req, res) => {
       totalPaid,
       outstanding: money(account.outstanding),
       approvedOffer: approvedOffer ? { amount: money(approvedOffer.amount), type: approvedOffer.type } : null,
+      currentStatus: account.status,
     });
 
     await tx.account.update({

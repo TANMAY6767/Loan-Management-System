@@ -202,7 +202,7 @@ export const getSettlementRequests = asyncHandler(async (req, res) => {
     stage: isManager ? 'Manager' : 'Head',
     account: {
       is: isManager
-        ? { officeId: req.user.officeId, assignedTo: { managerId: req.user.id } }
+        ? { officeId: req.user.officeId }
         : accountScope(req.user),
     },
   };

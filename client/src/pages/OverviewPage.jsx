@@ -21,44 +21,32 @@ const STATUS_ITEMS = [
 
 const METRIC_CONFIG = [
   {
-    key: 'selected-collected',
+    key: 'collected',
     icon: Wallet,
-    title: (dashboard) => dashboard?.selectedPeriod?.type === 'year' ? 'Recovered this year' : 'Recovered this month',
-    value: (dashboard) => dashboard ? cash(dashboard.selectedCollected) : '—',
-    foot: (dashboard) => dashboard?.selectedPeriod?.type === 'year' ? `Year ${dashboard.selectedPeriod.year}` : `${new Date(2000, (dashboard?.selectedPeriod?.month || 1) - 1).toLocaleString('en-IN', { month: 'long' })} ${dashboard?.selectedPeriod?.year || ''}`,
+    title: 'Collected this month',
+    value: (dashboard) => dashboard ? cash(dashboard.monthCollected) : '—',
+    foot: (dashboard) => `${cash(dashboard?.totalPaid)} total received to date`,
     color: 'mint',
   },
   {
-    key: 'total-recovered',
-    icon: Wallet,
-    title: 'Total recovered',
-    value: (dashboard) => dashboard ? cash(dashboard.totalPaid) : '—',
-    foot: 'All payment receipts in view',
-    color: 'blue',
-  },
-  {
-    key: 'recovery-rate',
+    key: 'accounts',
     icon: BriefcaseBusiness,
-    title: 'Portfolio recovered',
-    value: (dashboard) => dashboard ? `${Math.round(dashboard.recoveryPercent || 0)}%` : '—',
-    foot: (dashboard) => `${cash(dashboard?.totalPaid)} of ${cash(dashboard?.totalOutstanding)} original amount`,
-    color: 'purple',
+    title: (user) =>
+      user.role === 'caller' ? 'My accounts' : 'Accounts in view',
+    value: (dashboard) =>
+      dashboard?.totalAccounts?.toLocaleString('en-IN') || '—',
+    foot: (dashboard) =>
+      `${dashboard?.assigned?.toLocaleString('en-IN') || 0} currently assigned`,
+    color: 'mint',
   },
   {
     key: 'outstanding',
     icon: Wallet,
     title: 'Remaining balance',
-    value: (dashboard) => dashboard ? cash(dashboard.remainingBalance) : '—',
-    foot: 'Excludes closed and settled accounts',
+    value: (dashboard) =>
+      dashboard ? cash(dashboard.remainingBalance) : '—',
+    foot: (dashboard) => `${cash(dashboard?.totalOutstanding)} original portfolio`,
     color: 'blue',
-  },
-  {
-    key: 'today-collected',
-    icon: Wallet,
-    title: 'Recovered today',
-    value: (dashboard) => dashboard ? cash(dashboard.todayCollected) : '—',
-    foot: 'Payments recorded today',
-    color: 'mint',
   },
   {
     key: 'promises',
@@ -69,38 +57,17 @@ const METRIC_CONFIG = [
     color: 'amber',
   },
   {
-    key: 'settlements',
-    icon: Clock3,
-    title: 'Settlement approvals',
-    value: (dashboard) => dashboard?.pendingSettlementRequests ?? '—',
-    foot: 'Requests awaiting your review',
-    color: 'amber',
+    key: 'callers',
+    icon: Headphones,
+    title: 'Active callers',
+    value: (dashboard) => dashboard?.callers ?? '—',
+    foot: (dashboard, user) =>
+      user.role === 'caller'
+        ? 'Your caller profile'
+        : 'Across your team scope',
+    color: 'purple',
   },
 ];
-
-const MONTHS = Array.from({ length: 12 }, (_, index) => ({
-  value: index + 1,
-  label: new Date(2000, index).toLocaleString('en-IN', { month: 'long' }),
-}));
-
-function RecoveryFilters({ dashboardFilter, onChange }) {
-  const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: Math.max(6, currentYear - 2018 + 1) }, (_, index) => currentYear - index);
-  return (
-    <div className="recovery-filters" aria-label="Recovery period filters">
-      <span>Recovery period</span>
-      <label><span className="sr-only">Period</span><select value={dashboardFilter.period} onChange={(event) => onChange({ ...dashboardFilter, period: event.target.value })}>
-        <option value="month">Month</option><option value="year">Year</option>
-      </select></label>
-      {dashboardFilter.period === 'month' && <label><span className="sr-only">Month</span><select value={dashboardFilter.month} onChange={(event) => onChange({ ...dashboardFilter, month: Number(event.target.value) })}>
-        {MONTHS.map((month) => <option key={month.value} value={month.value}>{month.label}</option>)}
-      </select></label>}
-      <label><span className="sr-only">Year</span><select value={dashboardFilter.year} onChange={(event) => onChange({ ...dashboardFilter, year: Number(event.target.value) })}>
-        {years.map((year) => <option key={year} value={year}>{year}</option>)}
-      </select></label>
-    </div>
-  );
-}
 
 function getGreeting() {
   return new Date().getHours() < 12 ? 'morning' : 'afternoon';
@@ -173,7 +140,7 @@ function MetricsGrid({ dashboard, user }) {
       {METRIC_CONFIG.map((metric) => {
         const title =
           typeof metric.title === 'function'
-          ? metric.title(dashboard, user)
+            ? metric.title(user)
             : metric.title;
 
         const value = metric.value(dashboard);
@@ -430,8 +397,6 @@ function WelcomeStrip({ user, onNavigate }) {
 
 export default function OverviewPage({
   dashboard,
-  dashboardFilter,
-  onDashboardFilterChange,
   team,
   user,
   onNavigate,
@@ -442,7 +407,6 @@ export default function OverviewPage({
     <>
       <PageHeading user={user} onNavigate={onNavigate} />
 
-      <RecoveryFilters dashboardFilter={dashboardFilter} onChange={onDashboardFilterChange} />
       <MetricsGrid dashboard={dashboard} user={user} />
 
       <div className="overview-grid">
