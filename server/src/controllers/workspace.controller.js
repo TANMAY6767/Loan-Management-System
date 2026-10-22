@@ -298,12 +298,32 @@ export const getDashboard = asyncHandler(async (req, res) => {
 
   const accountIds = accounts.map((account) => account.loanNo);
   const now = new Date();
-  const monthStart = indiaPeriodStart(now, true);
+  const indiaNow = new Date(now.getTime() + INDIA_OFFSET_MS);
+  const currentYear = indiaNow.getUTCFullYear();
+  const currentMonth = indiaNow.getUTCMonth() + 1;
+  const period = req.query.period === 'year' ? 'year' : 'month';
+  const selectedYear = /^\d{4}$/.test(String(req.query.year || ''))
+    ? Number(req.query.year)
+    : currentYear;
+  const requestedMonth = Number(req.query.month);
+  const selectedMonth = Number.isInteger(requestedMonth) && requestedMonth >= 1 && requestedMonth <= 12
+    ? requestedMonth
+    : currentMonth;
+  const periodStart = new Date(Date.UTC(
+    selectedYear,
+    period === 'month' ? selectedMonth - 1 : 0,
+    1,
+  ) - INDIA_OFFSET_MS);
+  const periodEnd = new Date(Date.UTC(
+    selectedYear,
+    period === 'month' ? selectedMonth : 12,
+    1,
+  ) - INDIA_OFFSET_MS);
   const todayStart = indiaPeriodStart(now);
-  const [paymentTotals, monthPayments, todayPayments, paidByAccount] = accountIds.length
+  const [paymentTotals, selectedPayments, todayPayments, paidByAccount] = accountIds.length
     ? await Promise.all([
         prisma.payment.aggregate({ where: { accountId: { in: accountIds } }, _sum: { amount: true } }),
-        prisma.payment.aggregate({ where: { accountId: { in: accountIds }, paidAt: { gte: monthStart } }, _sum: { amount: true } }),
+        prisma.payment.aggregate({ where: { accountId: { in: accountIds }, paidAt: { gte: periodStart, lt: periodEnd } }, _sum: { amount: true } }),
         prisma.payment.aggregate({ where: { accountId: { in: accountIds }, paidAt: { gte: todayStart } }, _sum: { amount: true } }),
         prisma.payment.groupBy({ by: ['accountId'], where: { accountId: { in: accountIds } }, _sum: { amount: true } }),
       ])
@@ -329,8 +349,10 @@ export const getDashboard = asyncHandler(async (req, res) => {
     totalAccounts: accounts.length,
     totalOutstanding,
     totalPaid,
-    monthCollected: money(monthPayments?._sum.amount),
+    selectedCollected: money(selectedPayments?._sum.amount),
+    selectedPeriod: { type: period, month: selectedMonth, year: selectedYear },
     todayCollected: money(todayPayments?._sum.amount),
+    recoveryPercent: totalOutstanding > 0 ? (totalPaid / totalOutstanding) * 100 : 0,
     remainingBalance,
     assigned,
     unassigned: accounts.length - assigned,

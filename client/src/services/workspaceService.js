@@ -1,7 +1,8 @@
 import { apiClient } from './apiClient.js';
 
-export function getDashboard() {
-  return apiClient.get('/dashboard');
+export function getDashboard(filters) {
+  const query = new URLSearchParams(filters).toString();
+  return apiClient.get(`/dashboard${query ? `?${query}` : ''}`);
 }
 
 export function getTeam() {

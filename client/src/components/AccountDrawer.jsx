@@ -576,7 +576,7 @@ function SettlementWorkflow({ account, user, busy, onRequest, onReview }) {
       )}
 
       {activeOffer?.status === 'Pending' && (
-        <p className="settlement-hint">This request is awaiting {activeOffer.stage === 'Manager' ? 'manager review, then Head of Collections approval' : 'Head of Collections approval'}. Once approved, the account stays Part Payment until the agreed amount is fully recovered.</p>
+        <p className="settlement-hint">This request is awaiting {activeOffer.stage === 'Manager' ? 'manager review, then Head of Collections approval' : 'Head of Collections approval'}. Once approved, the account stays Part-paid until the agreed amount is fully recovered.</p>
       )}
     </section>
   );

@@ -46,7 +46,7 @@ export const dateTime = (value) =>
   value ? dateTimeFormatter.format(new Date(value)) : '?';
 
 export const statusName = (status) =>
-  status === 'Part_paid' ? 'Part Payment' : status;
+  status === 'Part_paid' ? 'Part-paid' : status;
 
 export const displayRole = (role) =>
   ROLE_LABELS[role] || role;

@@ -70,6 +70,10 @@ function App() {
 
   const [loading, setLoading] = useState(false);
   const [dashboard, setDashboard] = useState(null);
+  const [dashboardFilter, setDashboardFilter] = useState(() => {
+    const now = new Date();
+    return { period: 'month', month: now.getMonth() + 1, year: now.getFullYear() };
+  });
   const [team, setTeam] = useState([]);
   const [accounts, setAccounts] = useState({
     rows: [],
@@ -207,7 +211,7 @@ function App() {
 
     let ignore = false;
 
-    getDashboard()
+    getDashboard(dashboardFilter)
       .then((data) => {
         if (!ignore) {
           setDashboard(data);
@@ -219,28 +223,23 @@ function App() {
         }
       });
 
-    getTeam()
-      .then((data) => {
-        if (ignore) {
-          return;
-        }
-
-        setTeam(data);
-
-        setCallerId((current) => {
-          if (current) {
-            return current;
-          }
-
-          return data.find((member) => member.role === 'caller')?.id || '';
-        });
-      })
-      .catch(() => {});
-
     return () => {
       ignore = true;
     };
-  }, [token, user, refresh, notify]);
+  }, [token, user, refresh, notify, dashboardFilter]);
+
+  useEffect(() => {
+    if (!token || !user) return undefined;
+    let ignore = false;
+    getTeam()
+      .then((data) => {
+        if (ignore) return;
+        setTeam(data);
+        setCallerId((current) => current || data.find((member) => member.role === 'caller')?.id || '');
+      })
+      .catch(() => {});
+    return () => { ignore = true; };
+  }, [token, user, refresh]);
 
   const loadNotifications = useCallback(() => {
     getNotifications().then(setNotifications).catch(() => {});
@@ -501,6 +500,8 @@ function App() {
           {view === 'Overview' && (
             <OverviewPage
               dashboard={dashboard}
+              dashboardFilter={dashboardFilter}
+              onDashboardFilterChange={setDashboardFilter}
               team={team}
               user={user}
               onNavigate={setView}
