@@ -40,6 +40,7 @@ const ACCOUNT_INCLUDE = {
     include: {
       requestedBy: { select: { id: true, name: true } },
       reviewedBy: { select: { id: true, name: true } },
+      managerReviewedBy: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: 'desc' },
   },
@@ -417,9 +418,13 @@ export const createPromise = asyncHandler(async (req, res) => {
 
 export const createSettlementOffer = asyncHandler(async (req, res) => {
   const amount = Number(req.body?.amount);
+  const type = req.body?.type || 'Settlement';
   const account = req.account;
+  if (!['Settlement', 'Closure'].includes(type)) {
+    throw new ApiError(statusType.BAD_REQUEST, 'Choose settlement or regular closure.');
+  }
   if (!Number.isFinite(amount) || amount <= 0 || amount > money(account.outstanding)) {
-    throw new ApiError(statusType.BAD_REQUEST, 'Enter a settlement amount above zero and no greater than the original outstanding.');
+    throw new ApiError(statusType.BAD_REQUEST, 'Enter an agreed amount above zero and no greater than the outstanding balance.');
   }
   if (['Closed', 'Settled'].includes(account.status)) {
     throw new ApiError(statusType.CONFLICT, 'This account is already resolved.');
@@ -432,10 +437,16 @@ export const createSettlementOffer = asyncHandler(async (req, res) => {
     throw new ApiError(statusType.CONFLICT, 'Resolve the existing settlement request before creating another.');
   }
   const offer = await prisma.settlementOffer.create({
-    data: { accountId: account.loanNo, amount, requestedById: req.user.id },
+    data: {
+      accountId: account.loanNo,
+      amount,
+      type,
+      requestedById: req.user.id,
+      stage: req.user.role === 'caller' ? 'Manager' : 'Head',
+    },
     include: { requestedBy: { select: { id: true, name: true } } },
   });
-  return sendResponse(res, true, offer, 'Settlement request submitted for approval.', statusType.CREATED);
+  return sendResponse(res, true, offer, `${type === 'Settlement' ? 'Settlement' : 'Closure'} request submitted for approval.`, statusType.CREATED);
 });
 
 export const reviewSettlementOffer = asyncHandler(async (req, res) => {
@@ -450,57 +461,95 @@ export const reviewSettlementOffer = asyncHandler(async (req, res) => {
   const offer = await prisma.settlementOffer.findFirst({
     where: { id: req.params.settlementId, accountId: account.loanNo },
   });
-  if (!offer) throw new ApiError(statusType.NOT_FOUND, 'Settlement request not found.');
-  if (offer.status !== 'Pending') throw new ApiError(statusType.CONFLICT, 'This settlement request has already been reviewed.');
+  if (!offer) throw new ApiError(statusType.NOT_FOUND, 'Approval request not found.');
+  if (offer.status !== 'Pending') throw new ApiError(statusType.CONFLICT, 'This request has already been reviewed.');
   if (offer.requestedById === req.user.id) {
-    throw new ApiError(statusType.FORBIDDEN, 'A settlement request must be reviewed by another authorized user.');
+    throw new ApiError(statusType.FORBIDDEN, 'A request must be reviewed by another authorized user.');
   }
 
+  if (offer.stage === 'Manager') {
+    if (req.user.role !== 'manager') {
+      throw new ApiError(statusType.FORBIDDEN, 'A manager must review this request before Head of Collections.');
+    }
+    if (account.officeId !== req.user.officeId || account.assignedTo?.managerId !== req.user.id) {
+      throw new ApiError(statusType.FORBIDDEN, 'Only the assigned manager in this branch can review this request.');
+    }
+  } else if (req.user.role !== 'head') {
+    throw new ApiError(statusType.FORBIDDEN, 'Only Head of Collections can complete the final review.');
+  }
+
+  const requestName = offer.type === 'Settlement' ? 'Settlement' : 'Closure';
+  const managerStage = offer.stage === 'Manager';
+  const advancing = managerStage && decision === 'approve';
   const reviewed = await prisma.$transaction(async (tx) => {
+    const now = new Date();
     const updateResult = await tx.settlementOffer.updateMany({
-      where: { id: offer.id, status: 'Pending' },
+      where: { id: offer.id, status: 'Pending', stage: offer.stage },
       data: {
-        status: decision === 'approve' ? 'Approved' : 'Rejected',
-        reviewedById: req.user.id,
-        reviewedAt: new Date(),
+        ...(advancing ? { stage: 'Head' } : { status: decision === 'approve' ? 'Approved' : 'Rejected' }),
+        ...(managerStage
+          ? { managerReviewedById: req.user.id, managerReviewedAt: now }
+          : { reviewedById: req.user.id, reviewedAt: now }),
       },
     });
     if (updateResult.count !== 1) {
-      throw new ApiError(statusType.CONFLICT, 'This settlement request has already been reviewed.');
+      throw new ApiError(statusType.CONFLICT, 'This request has already been reviewed.');
     }
     const updatedOffer = await tx.settlementOffer.findUnique({
       where: { id: offer.id },
       include: {
         requestedBy: { select: { id: true, name: true } },
         reviewedBy: { select: { id: true, name: true } },
+        managerReviewedBy: { select: { id: true, name: true } },
       },
     });
+    const resultText = advancing
+      ? 'approved by the manager and sent to Head of Collections'
+      : `${decision === 'approve' ? 'approved' : 'rejected'}${managerStage ? ' by the manager' : ' by Head of Collections'}`;
     await tx.notification.create({
       data: {
         userId: offer.requestedById,
         accountId: account.loanNo,
         settlementOfferId: offer.id,
-        title: decision === 'approve' ? 'Settlement request approved' : 'Settlement request rejected',
-        message: `Your ₹${money(offer.amount).toLocaleString('en-IN')} settlement request for account ${account.loanNo} was ${decision === 'approve' ? 'approved' : 'rejected'}.`,
+        title: `${requestName} request ${advancing ? 'sent for final approval' : decision === 'approve' ? 'approved' : 'rejected'}`,
+        message: `Your ${requestName.toLowerCase()} request for account ${account.loanNo} was ${resultText}.`,
       },
     });
-    if (decision === 'approve') {
+    if (advancing) {
+      const heads = await tx.user.findMany({ where: { role: 'head' }, select: { id: true } });
+      if (heads.length) {
+        await tx.notification.createMany({
+          data: heads.map(({ id }) => ({
+            userId: id,
+            accountId: account.loanNo,
+            settlementOfferId: offer.id,
+            title: `${requestName} request awaiting final approval`,
+            message: `A manager approved the ${requestName.toLowerCase()} request for account ${account.loanNo}.`,
+          })),
+        });
+      }
+    }
+    if (!managerStage && decision === 'approve') {
       const paid = await tx.payment.aggregate({
         where: { accountId: account.loanNo },
         _sum: { amount: true },
       });
-      if (money(paid._sum.amount) >= money(offer.amount)) {
-        await tx.account.update({ where: { loanNo: account.loanNo }, data: { status: 'Settled' } });
-      }
+      const totalPaid = money(paid._sum.amount);
+      await tx.account.update({
+        where: { loanNo: account.loanNo },
+        data: { status: totalPaid >= money(offer.amount)
+          ? (offer.type === 'Settlement' ? 'Settled' : 'Closed')
+          : 'Part_paid' },
+      });
     }
     return updatedOffer;
   });
-  const resultMessage = decision === 'approve'
-    ? 'Settlement request approved.'
-    : 'Settlement request rejected.';
+
+  const resultMessage = advancing
+    ? `${requestName} request approved by manager and sent to Head of Collections.`
+    : `${requestName} request ${decision === 'approve' ? 'approved' : 'rejected'}.`;
   return sendResponse(res, true, reviewed, resultMessage);
 });
-
 export const recordPayment = asyncHandler(async (req, res) => {
   const amount = Number(req.body?.amount);
   const paidAt = req.body?.paidAt
@@ -552,14 +601,15 @@ export const recordPayment = asyncHandler(async (req, res) => {
       );
     }
 
-    const approvedSettlement = await tx.settlementOffer.findFirst({
+    const approvedOffer = await tx.settlementOffer.findFirst({
       where: { accountId: account.loanNo, status: 'Approved' },
       orderBy: { reviewedAt: 'desc' },
+      select: { amount: true, type: true },
     });
     const status = resolvePaymentStatus({
       totalPaid,
       outstanding: money(account.outstanding),
-      approvedSettlementAmount: approvedSettlement ? money(approvedSettlement.amount) : null,
+      approvedOffer: approvedOffer ? { amount: money(approvedOffer.amount), type: approvedOffer.type } : null,
     });
 
     await tx.account.update({

@@ -196,9 +196,15 @@ export const getCallerDetails = asyncHandler(async (req, res) => {
 });
 
 export const getSettlementRequests = asyncHandler(async (req, res) => {
+  const isManager = req.user.role === 'manager';
   const where = {
     status: 'Pending',
-    account: { is: accountScope(req.user) },
+    stage: isManager ? 'Manager' : 'Head',
+    account: {
+      is: isManager
+        ? { officeId: req.user.officeId, assignedTo: { managerId: req.user.id } }
+        : accountScope(req.user),
+    },
   };
   const [items, total] = await Promise.all([
     prisma.settlementOffer.findMany({
@@ -252,9 +258,11 @@ export const markNotificationRead = asyncHandler(async (req, res) => {
 });
 
 export const getDashboard = asyncHandler(async (req, res) => {
-  await markOverduePromises(accountScope(req.user));
+  const scope = req.user.role === 'manager'
+    ? { officeId: req.user.officeId }
+    : accountScope(req.user);
+  await markOverduePromises(scope);
 
-  const scope = accountScope(req.user);
   const [accounts, people, pendingPromises, pendingSettlementRequests] = await Promise.all([
     prisma.account.findMany({
       where: scope,
@@ -264,11 +272,17 @@ export const getDashboard = asyncHandler(async (req, res) => {
       where: ['head', 'coo'].includes(req.user.role)
         ? { role: 'caller' }
         : req.user.role === 'manager'
-          ? { role: 'caller', managerId: req.user.id }
+          ? { role: 'caller', officeId: req.user.officeId }
           : { id: req.user.id },
     }),
     prisma.pTP.count({ where: { status: 'Pending', account: { is: scope } } }),
-    prisma.settlementOffer.count({ where: { status: 'Pending', account: { is: scope } } }),
+    prisma.settlementOffer.count({
+      where: {
+        status: 'Pending',
+        ...(req.user.role === 'manager' ? { stage: 'Manager' } : req.user.role === 'head' ? { stage: 'Head' } : {}),
+        account: { is: scope },
+      },
+    }),
   ]);
 
   const statuses = Object.fromEntries(

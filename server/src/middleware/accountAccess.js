@@ -20,6 +20,7 @@ export const loadAccessibleAccount = asyncHandler(async (req, _res, next) => {
         include: {
           requestedBy: { select: { id: true, name: true } },
           reviewedBy: { select: { id: true, name: true } },
+          managerReviewedBy: { select: { id: true, name: true } },
         },
         orderBy: { createdAt: 'desc' },
       },

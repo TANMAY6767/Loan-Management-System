@@ -1704,6 +1704,33 @@ td {
   color: #285c40;
 }
 
+.balance-card .approved-agreement-row {
+  grid-column: 1 / -1;
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.balance-card .approved-agreement-row span {
+  color: #52655a;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.balance-card .approved-agreement-row strong {
+  font-size: 14px;
+  text-align: right;
+}
+
+.approved-agreement-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #53675a;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .drawer-tabs {
   display: flex;
   gap: 20px;
@@ -1896,7 +1923,7 @@ td {
 
 .settlement-workflow .section-title { margin-bottom: 11px; }
 .settlement-workflow .section-title h3 { font-size: 11px; }
-.settlement-workflow .section-title span { color: #9aa39d; font-size: 8px; }
+.settlement-workflow .section-title span { color: #758178; font-size: 12px; }
 
 .settlement-list { display: grid; gap: 7px; }
 
@@ -1913,10 +1940,10 @@ td {
 
 .settlement-row > div:first-child { min-width: 0; }
 .settlement-row strong,.settlement-row span,.settlement-row small { display: block; }
-.settlement-row strong { color: #41574a; font-size: 10px; }
-.settlement-row span,.settlement-row small { margin-top: 3px; color: #8b968e; font-size: 8px; }
+.settlement-row strong { color: #41574a; font-size: 13px; }
+.settlement-row span,.settlement-row small { margin-top: 4px; color: #69766d; font-size: 11px; line-height: 1.4; }
 .settlement-actions { display: flex; gap: 5px; flex: none; }
-.settlement-actions .primary-button,.settlement-actions .secondary-button { min-height: 28px; padding: 0 9px; font-size: 8px; }
+.settlement-actions .primary-button,.settlement-actions .secondary-button { min-height: 34px; padding: 0 11px; font-size: 12px; }
 
 .settlement-request-form {
   display: flex;
@@ -1930,19 +1957,29 @@ td {
   flex: 1;
   gap: 5px;
   color: #7f8982;
-  font-size: 8px;
+  font-size: 13px;
 }
 
 .settlement-request-form input {
-  height: 32px;
+  height: 38px;
   padding: 0 9px;
   border: 1px solid #e3e9e3;
   border-radius: 6px;
   color: #4d5a50;
-  font-size: 10px;
+  font-size: 14px;
 }
 
-.settlement-request-form .secondary-button { min-height: 32px; padding: 0 10px; font-size: 8px; }
+.settlement-request-form select {
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid #e3e9e3;
+  border-radius: 6px;
+  background: white;
+  color: #34473a;
+  font-size: 14px;
+}
+
+.settlement-request-form .secondary-button { min-height: 38px; padding: 0 12px; font-size: 12px; }
 
 .settlement-hint,.settlement-approved-note {
   margin: 8px 0 0;
@@ -1950,8 +1987,8 @@ td {
   border-radius: 6px;
   background: #f1f5ed;
   color: #788679;
-  font-size: 8px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .settlement-approved-note { margin: 0 0 9px; color: #4e7258; }
