@@ -69,6 +69,43 @@ const METRIC_CONFIG = [
   },
 ];
 
+const MONTHS = Array.from({ length: 12 }, (_, index) => ({
+  value: index + 1,
+  label: new Date(2000, index).toLocaleString('en-IN', { month: 'long' }),
+}));
+
+function RecoveryPeriodKpi({ dashboard, dashboardFilter, onChange }) {
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: Math.max(6, currentYear - 2018 + 1) }, (_, index) => currentYear - index);
+  const isYear = dashboardFilter.period === 'year';
+  const monthLabel = MONTHS.find((month) => month.value === dashboardFilter.month)?.label;
+  const periodLabel = isYear
+    ? `Year ${dashboardFilter.year}`
+    : `${monthLabel} ${dashboardFilter.year}`;
+
+  return (
+    <section className="metric-card recovery-period-card">
+      <div className="metric-top">
+        <div className="metric-icon purple"><Wallet size={18} /></div>
+        <div className="recovery-period-controls" aria-label="Filter recovered amount">
+          <label><span className="sr-only">Recovery period</span><select value={dashboardFilter.period} onChange={(event) => onChange({ ...dashboardFilter, period: event.target.value })}>
+            <option value="month">Month</option><option value="year">Year</option>
+          </select></label>
+          {!isYear && <label><span className="sr-only">Month</span><select value={dashboardFilter.month} onChange={(event) => onChange({ ...dashboardFilter, month: Number(event.target.value) })}>
+            {MONTHS.map((month) => <option key={month.value} value={month.value}>{month.label}</option>)}
+          </select></label>}
+          <label><span className="sr-only">Year</span><select value={dashboardFilter.year} onChange={(event) => onChange({ ...dashboardFilter, year: Number(event.target.value) })}>
+            {years.map((year) => <option key={year} value={year}>{year}</option>)}
+          </select></label>
+        </div>
+      </div>
+      <div className="metric-title">Recovered by period</div>
+      <div className="metric-value">{dashboard ? cash(dashboard.selectedCollected) : '—'}</div>
+      <div className="metric-foot"><span className="metric-foot-dot" />{periodLabel}</div>
+    </section>
+  );
+}
+
 function getGreeting() {
   return new Date().getHours() < 12 ? 'morning' : 'afternoon';
 }
@@ -134,7 +171,7 @@ function MetricCard({ icon: Icon, title, value, foot, color }) {
   );
 }
 
-function MetricsGrid({ dashboard, user }) {
+function MetricsGrid({ dashboard, dashboardFilter, onDashboardFilterChange, user }) {
   return (
     <div className="metric-grid">
       {METRIC_CONFIG.map((metric) => {
@@ -161,6 +198,11 @@ function MetricsGrid({ dashboard, user }) {
           />
         );
       })}
+      <RecoveryPeriodKpi
+        dashboard={dashboard}
+        dashboardFilter={dashboardFilter}
+        onChange={onDashboardFilterChange}
+      />
     </div>
   );
 }
@@ -397,6 +439,8 @@ function WelcomeStrip({ user, onNavigate }) {
 
 export default function OverviewPage({
   dashboard,
+  dashboardFilter,
+  onDashboardFilterChange,
   team,
   user,
   onNavigate,
@@ -407,7 +451,12 @@ export default function OverviewPage({
     <>
       <PageHeading user={user} onNavigate={onNavigate} />
 
-      <MetricsGrid dashboard={dashboard} user={user} />
+      <MetricsGrid
+        dashboard={dashboard}
+        dashboardFilter={dashboardFilter}
+        onDashboardFilterChange={onDashboardFilterChange}
+        user={user}
+      />
 
       <div className="overview-grid">
         <PortfolioSnapshot dashboard={dashboard} />

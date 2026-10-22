@@ -409,8 +409,32 @@ button:disabled {
 
 .metric-grid {
   display: grid;
-  grid-template-columns: repeat(5,minmax(0,1fr));
+  grid-template-columns: repeat(3,minmax(0,1fr));
   gap: 15px;
+}
+
+.recovery-period-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+  max-width: calc(100% - 40px);
+}
+
+.recovery-period-controls select {
+  width: auto;
+  max-width: 92px;
+  height: 29px;
+  padding: 0 21px 0 8px;
+  border: 1px solid #e2e8e3;
+  border-radius: 7px;
+  background: #fff;
+  color: #526158;
+  font: 500 10px Manrope, sans-serif;
+}
+
+.recovery-period-card .metric-title {
+  margin-top: 11px;
 }
 
 .metric-card,.panel {
